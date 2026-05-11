@@ -1,0 +1,72 @@
+{
+  "projects": [],
+  "team_members": [
+    {
+      "id": "c6f82b49-c372-42f8-91ca-d2b4ff855468",
+      "name": "popttan",
+      "role": "test",
+      "image": "",
+      "points": 37,
+      "link": "https://alpha.loyaltri.com/payrollTable",
+      "description": "waerrr",
+      "type": "leader",
+      "order": 0,
+      "createdAt": "2026-04-20T11:59:22.843Z",
+      "updatedAt": "2026-04-20T11:59:22.843Z"
+    },
+    {
+      "id": "9eb2020b-f2f9-4095-b493-da8153ca59a2",
+      "name": "dg",
+      "role": "dfgdf",
+      "image": "",
+      "points": 0,
+      "link": "https://alpha.loyaltri.com/payrollTable",
+      "description": "sd",
+      "type": "leader",
+      "order": 1,
+      "createdAt": "2026-04-20T12:01:39.405Z",
+      "updatedAt": "2026-04-20T12:01:39.405Z"
+    },
+    {
+      "id": "fb477f15-7fa3-43e8-86a1-3a45aa995057",
+      "name": "AJMAL",
+      "role": "ABC",
+      "image": "/uploads/team/1777614575738_Image_from_Gboard_clipboard__13_.jpg",
+      "points": 0,
+      "link": "https://ajmal.com",
+      "description": "Preview for \"AJMAL\": a concise team member (it) summary generated from the local fallback because the OpenAI quota is currently exhausted.",
+      "type": "it",
+      "order": 0,
+      "createdAt": "2026-05-01T05:48:35.793Z",
+      "updatedAt": "2026-05-01T05:49:47.218Z"
+    }
+  ],
+  "events": [
+    {
+      "id": "2d280a78-6ecd-4e6e-8489-a372226dd723",
+      "title": "tech fest",
+      "description": "Preview for \"tech fest\": a concise event summary generated from the local fallback because the OpenAI quota is currently exhausted.",
+      "images": [],
+      "order": 0,
+      "date": "2026-04-23",
+      "status": "Ongoing",
+      "createdAt": "2026-04-20T13:21:08.500Z",
+      "updatedAt": "2026-04-20T13:21:08.500Z"
+    }
+  ],
+  "settings": [
+    {
+      "id": "c099595b-cbb9-4b3b-9c5d-7d7ee3df7188",
+      "siteName": "RACE Portal",
+      "contactEmail": "info@raceindia.org",
+      "contactPhone": "9633146330",
+      "address": "Kerala, India",
+      "instagram": "",
+      "linkedin": "",
+      "facebook": "",
+      "twitter": "",
+      "createdAt": "2026-04-20T13:23:57.636Z",
+      "updatedAt": "2026-04-20T13:23:57.636Z"
+    }
+  ]
+}
