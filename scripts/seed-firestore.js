@@ -11,6 +11,9 @@ function readServiceAccount() {
   const base64 = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_BASE64;
   if (base64) return JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
 
+  const filePath = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_PATH;
+  if (filePath) return JSON.parse(fs.readFileSync(filePath, "utf8"));
+
   return null;
 }
 
@@ -19,12 +22,21 @@ function initAdmin() {
 
   const serviceAccount = readServiceAccount();
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  if (!projectId) {
+    throw new Error("Missing NEXT_PUBLIC_FIREBASE_PROJECT_ID.");
+  }
 
   if (serviceAccount) {
     return admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       projectId,
     });
+  }
+
+  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    throw new Error(
+      "Firebase Admin credentials not configured. Set FIREBASE_ADMIN_SERVICE_ACCOUNT(_BASE64/_PATH) or GOOGLE_APPLICATION_CREDENTIALS."
+    );
   }
 
   return admin.initializeApp({
@@ -70,4 +82,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-

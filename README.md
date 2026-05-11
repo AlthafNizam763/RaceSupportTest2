@@ -10,6 +10,7 @@ Set one of:
 
 - `FIREBASE_ADMIN_SERVICE_ACCOUNT` (JSON string), or
 - `FIREBASE_ADMIN_SERVICE_ACCOUNT_BASE64` (base64-encoded JSON), or
+- `FIREBASE_ADMIN_SERVICE_ACCOUNT_PATH` (path to a service account JSON file), or
 - `GOOGLE_APPLICATION_CREDENTIALS` (path to a service account JSON file)
 
 And set:
@@ -21,4 +22,3 @@ And set:
 This uploads `data/cms-store.json` into Firestore collections with the same names:
 
 `npm run seed:firestore`
-
