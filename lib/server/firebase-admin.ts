@@ -1,5 +1,7 @@
-import admin from "firebase-admin";
 import fs from "fs";
+
+import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
 function readServiceAccount() {
   const json = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT;
@@ -23,8 +25,9 @@ function readServiceAccount() {
 }
 
 export function getAdminApp() {
-  if (admin.apps.length) {
-    return admin.app();
+  const existing = getApps();
+  if (existing.length) {
+    return existing[0];
   }
 
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -36,8 +39,8 @@ export function getAdminApp() {
 
   const serviceAccount = readServiceAccount();
   if (serviceAccount) {
-    return admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    return initializeApp({
+      credential: cert(serviceAccount),
       projectId,
     });
   }
@@ -48,12 +51,12 @@ export function getAdminApp() {
     );
   }
 
-  return admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
+  return initializeApp({
+    credential: applicationDefault(),
     projectId,
   });
 }
 
 export function getAdminFirestore() {
-  return getAdminApp().firestore();
+  return getFirestore(getAdminApp());
 }
