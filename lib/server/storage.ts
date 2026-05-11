@@ -1,9 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
-
-import { storage } from "@/lib/firebase";
+import { getAdminApp } from "@/lib/server/firebase-admin";
 
 const LOCAL_UPLOAD_ROOT = path.join(process.cwd(), "public", "uploads");
 
@@ -24,21 +22,43 @@ function buildObjectPath(folder: string, fileName: string) {
   return `${cleanFolder}/${Date.now()}_${sanitizeFileName(fileName)}`;
 }
 
-async function uploadFilesToFirebase(files: File[], folder = "uploads") {
+function getAdminStorage() {
+  // Dynamically require firebase-admin/storage to avoid bundler issues
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getStorage } = require("firebase-admin/storage");
+  return getStorage(getAdminApp());
+}
+
+function getStorageBucket() {
+  const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+  if (!bucketName) {
+    throw new Error("Missing NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET environment variable.");
+  }
+  return getAdminStorage().bucket(bucketName);
+}
+
+async function uploadFilesToFirebase(files: File[], folder = "uploads"): Promise<UploadedAsset[]> {
+  const bucket = getStorageBucket();
+
   return Promise.all(
     files.map(async (file) => {
       const objectPath = buildObjectPath(folder, file.name);
-      const storageRef = ref(storage, objectPath);
-      const bytes = new Uint8Array(await file.arrayBuffer());
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const fileRef = bucket.file(objectPath);
 
-      await uploadBytes(storageRef, bytes, {
+      await fileRef.save(buffer, {
         contentType: file.type || "application/octet-stream",
-        customMetadata: {
-          originalName: file.name,
+        metadata: {
+          metadata: {
+            originalName: file.name,
+          },
         },
       });
 
-      const url = await getDownloadURL(storageRef);
+      // Make file publicly readable and get the download URL
+      await fileRef.makePublic();
+      const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!;
+      const url = `https://storage.googleapis.com/${bucketName}/${objectPath}`;
 
       return {
         url,
@@ -51,7 +71,7 @@ async function uploadFilesToFirebase(files: File[], folder = "uploads") {
   );
 }
 
-async function uploadFilesLocally(files: File[], folder = "uploads") {
+async function uploadFilesLocally(files: File[], folder = "uploads"): Promise<UploadedAsset[]> {
   return Promise.all(
     files.map(async (file) => {
       const objectPath = buildObjectPath(folder, file.name);
@@ -71,10 +91,11 @@ async function uploadFilesLocally(files: File[], folder = "uploads") {
   );
 }
 
-export async function uploadFilesToStorage(files: File[], folder = "uploads") {
+export async function uploadFilesToStorage(files: File[], folder = "uploads"): Promise<UploadedAsset[]> {
   try {
     return await uploadFilesToFirebase(files, folder);
-  } catch {
+  } catch (err) {
+    console.warn("[storage] Firebase upload failed, falling back to local storage:", (err as Error).message);
     return uploadFilesLocally(files, folder);
   }
 }
@@ -85,16 +106,31 @@ async function deleteLocalFile(target: string) {
   await fs.rm(localPath, { force: true });
 }
 
-export async function deleteFileFromStorage(target: string) {
+async function deleteFromFirebase(target: string) {
+  const bucket = getStorageBucket();
+  // target can be a full URL or a storage object path
+  let objectPath = target;
+  const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!;
+  if (target.startsWith("https://storage.googleapis.com/")) {
+    objectPath = target.replace(`https://storage.googleapis.com/${bucketName}/`, "");
+  } else if (target.startsWith("https://firebasestorage.googleapis.com/")) {
+    // Handle Firebase download URLs: extract path after /o/
+    const match = target.match(/\/o\/([^?]+)/);
+    objectPath = match ? decodeURIComponent(match[1]) : target;
+  }
+  await bucket.file(objectPath).delete();
+}
+
+export async function deleteFileFromStorage(target: string): Promise<void> {
   if (target.startsWith("local:") || target.startsWith("/uploads/")) {
     await deleteLocalFile(target);
     return;
   }
 
   try {
-    const storageRef = ref(storage, target);
-    await deleteObject(storageRef);
-  } catch {
+    await deleteFromFirebase(target);
+  } catch (err) {
+    console.warn("[storage] Firebase delete failed, attempting local delete:", (err as Error).message);
     await deleteLocalFile(target);
   }
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 
 import { getAdminFirestore } from "@/lib/server/firebase-admin";
+import { logAuditEvent } from "@/lib/server/data-audit";
 
 type CmsRecord = Record<string, any>;
 
@@ -45,6 +46,16 @@ export async function createDocument(collectionName: string, data: Record<string
   };
 
   await getCollection(collectionName).doc(id).set(item);
+
+  // Log the creation
+  await logAuditEvent({
+    operation: "CREATE",
+    collectionName,
+    documentId: id,
+    dataSnapshot: item,
+    status: "SUCCESS",
+  });
+
   return item;
 }
 
@@ -57,19 +68,45 @@ export async function updateDocument(
   const existing = await ref.get();
   if (!existing.exists) return null;
 
+  const oldData = existing.data() as CmsRecord;
   const item: CmsRecord = {
-    ...(existing.data() as CmsRecord),
+    ...oldData,
     ...data,
     id,
     updatedAt: new Date().toISOString(),
   };
 
   await ref.set(item, { merge: true });
+
+  // Log the update
+  await logAuditEvent({
+    operation: "UPDATE",
+    collectionName,
+    documentId: id,
+    dataSnapshot: item,
+    oldDataSnapshot: oldData,
+    status: "SUCCESS",
+  });
+
   return item;
 }
 
 export async function deleteDocument(collectionName: string, id: string) {
-  await getCollection(collectionName).doc(id).delete();
+  // Get the document before deletion for audit
+  const ref = getCollection(collectionName).doc(id);
+  const doc = await ref.get();
+  const deletedData = doc.exists ? (doc.data() as CmsRecord) : null;
+
+  await ref.delete();
+
+  // Log the deletion
+  await logAuditEvent({
+    operation: "DELETE",
+    collectionName,
+    documentId: id,
+    oldDataSnapshot: deletedData || undefined,
+    status: "SUCCESS",
+  });
 }
 
 export async function reorderDocuments(

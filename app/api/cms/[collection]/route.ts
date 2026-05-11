@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { listDocuments, createDocument } from "@/lib/server/firestore";
+import { listDocuments, createDocument, updateDocument } from "@/lib/server/firestore";
 import { resolveCmsCollection } from "@/lib/server/cms-config";
 import { errorResponse, successResponse } from "@/lib/server/responses";
 import { applySessionCookies, requireSession } from "@/lib/server/session";
@@ -50,6 +50,17 @@ export async function POST(
 
     if (!parsed.success) {
       return errorResponse("Validation failed.", 400, parsed.error.flatten());
+    }
+
+    // For singleton collections (e.g. settings), upsert into the existing document
+    if (collectionConfig.singleton) {
+      const existing = await listDocuments(collectionConfig.collectionName);
+      if (existing.length > 0) {
+        const existingId = (existing[0] as any).id as string;
+        const item = await updateDocument(collectionConfig.collectionName, existingId, parsed.data);
+        const response = successResponse(item, `Updated ${collectionConfig.key} settings successfully.`);
+        return sessionState.refreshed ? applySessionCookies(response, sessionState.session, request) : response;
+      }
     }
 
     const item = await createDocument(collectionConfig.collectionName, parsed.data);

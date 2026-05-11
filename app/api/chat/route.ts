@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireSession } from "@/lib/server/session";
 
-const CHAT_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const CHAT_MODEL = process.env.OPENAI_MODEL || "gpt-4o";
 
 const CMS_SYSTEM_PROMPT = `You are RACE Assistant, the built-in AI helper for the RACE CMS dashboard.
 You help admins manage content, uploads, settings, tickets, and other dashboard tasks.
@@ -55,7 +55,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const client = new OpenAI({ 
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: "https://ent.bujicoder.com/openai/v1"
+    });
     const completionMessages: ChatCompletionMessageParam[] = [
       { role: "system", content: CMS_SYSTEM_PROMPT },
       ...messages.map(
@@ -77,6 +80,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ reply });
   } catch (error: any) {
     const message = String(error?.message || "");
+    console.error("Chat API Error:", {
+      message: error?.message,
+      status: error?.status,
+      type: error?.type,
+    });
+    
     if (message.includes("429") || message.toLowerCase().includes("quota")) {
       return NextResponse.json({
         reply: getOfflineHelp(lastUserMessage),

@@ -5,6 +5,8 @@ import { listDocuments } from "@/lib/server/firestore";
 import { errorResponse, successResponse } from "@/lib/server/responses";
 import { applySessionCookies, requireSession } from "@/lib/server/session";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
   const sessionState = await requireSession(request);
   if (!sessionState) {

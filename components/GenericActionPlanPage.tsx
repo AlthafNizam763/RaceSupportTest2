@@ -238,7 +238,6 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
                   />
                 </div>
                 <textarea
-                  required
                   rows={5}
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
