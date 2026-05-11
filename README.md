@@ -17,6 +17,16 @@ And set:
 
 - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
 
+### Recommended local setup (Windows)
+
+1) Firebase Console → Project settings → Service accounts → **Generate new private key** (download JSON).
+2) Put the JSON somewhere outside git (for example `./secrets/firebase-admin.json`).
+3) Add to `.env.local`:
+
+`FIREBASE_ADMIN_SERVICE_ACCOUNT_PATH=./secrets/firebase-admin.json`
+
+Then restart `npm run dev`.
+
 ### Seed existing local data into Firestore
 
 This uploads `data/cms-store.json` into Firestore collections with the same names:

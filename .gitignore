@@ -2,6 +2,11 @@ node_modules
 .next
 .env
 .env.local
+.env.*.local
 out
 dist
 build
+
+# Service account keys (keep out of git)
+secrets/
+serviceAccountKey.json
