@@ -16,7 +16,7 @@ function readServiceAccount() {
   }
 
   const filePath = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_PATH;
-  if (filePath) {
+  if (filePath && fs.existsSync(filePath)) {
     const contents = fs.readFileSync(filePath, "utf8");
     return JSON.parse(contents);
   }
