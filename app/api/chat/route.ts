@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/server/session";
 
 const isGeminiKey = (process.env.OPENAI_API_KEY || "").startsWith("AQ.") || (process.env.OPENAI_API_KEY || "").startsWith("AIzaSy");
-const CHAT_MODEL = process.env.OPENAI_MODEL || (isGeminiKey ? "gemini-1.5-flash" : "gpt-4o");
+const CHAT_MODEL = process.env.OPENAI_MODEL || (isGeminiKey ? "gemini-2.5-flash" : "gpt-4o");
 const CHAT_BASE_URL = process.env.OPENAI_BASE_URL || (isGeminiKey ? "https://generativelanguage.googleapis.com/v1beta/openai/" : "https://ent.bujicoder.com/openai/v1");
 
 const CMS_SYSTEM_PROMPT = `You are RACE Assistant, the built-in AI helper for the RACE CMS dashboard.
@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
       message.includes("429") ||
       message.includes("401") ||
       message.includes("403") ||
+      message.includes("404") ||
       message.toLowerCase().includes("quota") ||
       message.toLowerCase().includes("api key")
     ) {
