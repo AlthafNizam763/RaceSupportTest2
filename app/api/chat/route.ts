@@ -4,7 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireSession } from "@/lib/server/session";
 
-const CHAT_MODEL = process.env.OPENAI_MODEL || "gpt-4o";
+const isGeminiKey = (process.env.OPENAI_API_KEY || "").startsWith("AQ.") || (process.env.OPENAI_API_KEY || "").startsWith("AIzaSy");
+const CHAT_MODEL = process.env.OPENAI_MODEL || (isGeminiKey ? "gemini-1.5-flash" : "gpt-4o");
+const CHAT_BASE_URL = process.env.OPENAI_BASE_URL || (isGeminiKey ? "https://generativelanguage.googleapis.com/v1beta/openai/" : "https://ent.bujicoder.com/openai/v1");
 
 const CMS_SYSTEM_PROMPT = `You are RACE Assistant, the built-in AI helper for the RACE CMS dashboard.
 You help admins manage content, uploads, settings, tickets, and other dashboard tasks.
@@ -57,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const client = new OpenAI({ 
       apiKey: process.env.OPENAI_API_KEY,
-      baseURL: "https://ent.bujicoder.com/openai/v1"
+      baseURL: CHAT_BASE_URL
     });
     const completionMessages: ChatCompletionMessageParam[] = [
       { role: "system", content: CMS_SYSTEM_PROMPT },
@@ -86,7 +88,13 @@ export async function POST(request: NextRequest) {
       type: error?.type,
     });
     
-    if (message.includes("429") || message.toLowerCase().includes("quota")) {
+    if (
+      message.includes("429") ||
+      message.includes("401") ||
+      message.includes("403") ||
+      message.toLowerCase().includes("quota") ||
+      message.toLowerCase().includes("api key")
+    ) {
       return NextResponse.json({
         reply: getOfflineHelp(lastUserMessage),
         isFallback: true,
