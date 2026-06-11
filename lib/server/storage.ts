@@ -94,8 +94,8 @@ async function uploadFilesLocally(files: File[], folder = "uploads"): Promise<Up
 export async function uploadFilesToStorage(files: File[], folder = "uploads"): Promise<UploadedAsset[]> {
   try {
     return await uploadFilesToFirebase(files, folder);
-  } catch (err) {
-    console.warn("[storage] Firebase upload failed, falling back to local storage:", (err as Error).message);
+  } catch (error: any) {
+    console.error("Firebase Storage upload failed, attempting local fallback:", error?.message || error);
     return uploadFilesLocally(files, folder);
   }
 }
