@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useRealtimeCollection } from "../../../hooks/useRealtimeCollection";
+import { useAuth } from "../../../hooks/useAuth";
 import { createDocument, updateDocument, deleteDocument, updateOrderBatch } from "../../../lib/firebase/firestore";
 import { uploadImage } from "../../../lib/firebase/storage";
+import { getDeleteConfirmationMessage } from "../../../lib/messages";
 import { DraggableList } from "../../../components/DraggableList";
 import { AIContentGenerator } from "../../../components/AIContentGenerator";
 import { Plus, Pencil, Trash2, Image as ImageIcon, X, Loader2, Link as LinkIcon, Award } from "lucide-react";
@@ -23,6 +25,8 @@ interface TeamMember {
 
 export default function TeamPage() {
   const { data: members, loading } = useRealtimeCollection<TeamMember>("team_members");
+  const { user } = useAuth();
+  const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TeamMember | null>(null);
   const [activeTab, setActiveTab] = useState<"leader" | "it">("leader");
@@ -74,6 +78,7 @@ export default function TeamPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewer) return;
     try {
       if (editingItem) {
         await updateDocument("team_members", editingItem.id, { ...formData, type: activeTab });
@@ -89,8 +94,9 @@ export default function TeamPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Remove this team member?")) {
+  const handleDelete = async (id: string, name?: string) => {
+    if (isViewer) return;
+    if (confirm(getDeleteConfirmationMessage("team member", name))) {
       try {
         await deleteDocument("team_members", id);
         toast.success("Member deleted.");
@@ -101,6 +107,7 @@ export default function TeamPage() {
   };
 
   const handleReorder = async (reorderedItems: TeamMember[]) => {
+    if (isViewer) return;
     try {
       const updates = reorderedItems.map((item, index) => ({ id: item.id, order: index }));
       await updateOrderBatch("team_members", updates);
@@ -117,12 +124,14 @@ export default function TeamPage() {
           <h1 className="text-3xl font-bold text-white tracking-tight">Team RACE</h1>
           <p className="text-muted-foreground mt-1">Manage Leaders and the IT & Media Cell profiles.</p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
-        >
-          <Plus className="w-5 h-5" /> Add Member
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => handleOpenModal()}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
+          >
+            <Plus className="w-5 h-5" /> Add Member
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-4 mb-6 bg-slate-900/50 p-1.5 rounded-xl border border-white/5 w-fit">
@@ -147,6 +156,7 @@ export default function TeamPage() {
           </div>
         ) : (
           <DraggableList
+            disabled={isViewer}
             items={activeMembers}
             onReorder={handleReorder}
             renderItem={(item) => (
@@ -178,22 +188,24 @@ export default function TeamPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
-                  <button
-                    onClick={() => handleOpenModal(item)}
-                    className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {!isViewer && (
+                  <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
+                    <button
+                      onClick={() => handleOpenModal(item)}
+                      className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id, item.name)}
+                      className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           />

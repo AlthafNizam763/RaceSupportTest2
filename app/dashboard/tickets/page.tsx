@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRealtimeCollection } from "../../../hooks/useRealtimeCollection";
+import { useAuth } from "../../../hooks/useAuth";
 import { updateDocument, deleteDocument } from "../../../lib/firebase/firestore";
+import { getDeleteConfirmationMessage } from "../../../lib/messages";
 import { 
   Ticket, 
   Clock, 
@@ -30,6 +32,8 @@ interface TicketItem {
 
 export default function TicketsPage() {
   const { data: tickets, loading } = useRealtimeCollection<TicketItem>("tickets");
+  const { user } = useAuth();
+  const isViewer = user?.role === "viewer";
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
 
@@ -71,8 +75,9 @@ export default function TicketsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Permanently delete this ticket?")) {
+  const handleDelete = async (id: string, subject?: string) => {
+    if (isViewer) return;
+    if (confirm(getDeleteConfirmationMessage("support ticket", subject))) {
       try {
         await deleteDocument("tickets", id);
         toast.success("Ticket deleted");
@@ -163,9 +168,10 @@ export default function TicketsPage() {
 
                       <div className="flex lg:flex-col items-center gap-3 shrink-0 w-full lg:w-auto pt-4 lg:pt-0 border-t lg:border-t-0 border-white/5">
                         <select 
+                          disabled={isViewer}
                           value={ticket.status}
                           onChange={(e) => updateStatus(ticket.id, e.target.value)}
-                          className="flex-1 lg:w-32 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none hover:bg-white/10 transition pointer-events-auto"
+                          className="flex-1 lg:w-32 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none hover:bg-white/10 transition pointer-events-auto disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <option value="Open">Open</option>
                           <option value="In Progress">In Progress</option>
@@ -173,9 +179,10 @@ export default function TicketsPage() {
                         </select>
                         
                         <button 
-                          onClick={() => handleDelete(ticket.id)}
-                          className="p-2.5 bg-destructive/10 hover:bg-destructive/20 text-red-400 rounded-lg transition-colors"
-                          title="Delete Ticket"
+                          disabled={isViewer}
+                          onClick={() => handleDelete(ticket.id, ticket.subject)}
+                          className="p-2.5 bg-destructive/10 hover:bg-destructive/20 text-red-400 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={isViewer ? "Viewers cannot delete tickets" : "Delete Ticket"}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

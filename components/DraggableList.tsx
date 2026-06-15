@@ -23,9 +23,10 @@ import { GripVertical } from "lucide-react";
 interface DraggableItemProps {
   id: string;
   children: React.ReactNode;
+  disabled?: boolean;
 }
 
-function SortableItem({ id, children }: DraggableItemProps) {
+function SortableItem({ id, children, disabled }: DraggableItemProps) {
   const {
     attributes,
     listeners,
@@ -33,7 +34,7 @@ function SortableItem({ id, children }: DraggableItemProps) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id });
+  } = useSortable({ id, disabled });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -49,13 +50,15 @@ function SortableItem({ id, children }: DraggableItemProps) {
         isDragging ? "shadow-2xl ring-2 ring-primary border-primary" : ""
       }`}
     >
-      <button
-        className="cursor-grab hover:text-primary transition-colors focus:outline-none"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="w-5 h-5 text-muted-foreground" />
-      </button>
+      {!disabled && (
+        <button
+          className="cursor-grab hover:text-primary transition-colors focus:outline-none"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="w-5 h-5 text-muted-foreground" />
+        </button>
+      )}
       <div className="flex-1 overflow-hidden">{children}</div>
     </div>
   );
@@ -65,9 +68,10 @@ interface DraggableListProps<T> {
   items: (T & { id: string })[];
   onReorder: (reorderedItems: (T & { id: string })[]) => void;
   renderItem: (item: T) => React.ReactNode;
+  disabled?: boolean;
 }
 
-export function DraggableList<T>({ items, onReorder, renderItem }: DraggableListProps<T>) {
+export function DraggableList<T>({ items, onReorder, renderItem, disabled }: DraggableListProps<T>) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -100,7 +104,7 @@ export function DraggableList<T>({ items, onReorder, renderItem }: DraggableList
       <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
         <div className="w-full">
           {items.map((item) => (
-            <SortableItem key={item.id} id={item.id}>
+            <SortableItem key={item.id} id={item.id} disabled={disabled}>
               {renderItem(item)}
             </SortableItem>
           ))}

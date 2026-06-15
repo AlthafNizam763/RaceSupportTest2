@@ -32,6 +32,7 @@ export interface AuthSessionUser {
   displayName: string;
   emailVerified: boolean;
   photoUrl?: string;
+  role?: string;
 }
 
 export interface AuthSession {

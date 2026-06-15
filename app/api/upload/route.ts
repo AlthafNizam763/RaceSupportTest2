@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { errorResponse, successResponse } from "@/lib/server/responses";
-import { applySessionCookies, requireSession } from "@/lib/server/session";
+import { applySessionCookies, requireSession, requireWriteAccess } from "@/lib/server/session";
 import { deleteFileFromStorage, uploadFilesToStorage } from "@/lib/server/storage";
 
 const ALLOWED_TYPES = new Set([
@@ -20,6 +20,11 @@ export async function POST(request: NextRequest) {
   const sessionState = await requireSession(request);
   if (!sessionState) {
     return errorResponse("Unauthorized access.", 401);
+  }
+
+  const writeState = await requireWriteAccess(request);
+  if (!writeState) {
+    return errorResponse("Permission denied. Viewers cannot modify content.", 403);
   }
 
   try {
@@ -53,6 +58,11 @@ export async function DELETE(request: NextRequest) {
   const sessionState = await requireSession(request);
   if (!sessionState) {
     return errorResponse("Unauthorized access.", 401);
+  }
+
+  const writeState = await requireWriteAccess(request);
+  if (!writeState) {
+    return errorResponse("Permission denied. Viewers cannot modify content.", 403);
   }
 
   try {

@@ -19,8 +19,10 @@ import {
   Image as ImageIcon,
   Star,
   Ticket,
-  Settings
+  Settings,
+  UserCheck
 } from "lucide-react";
+import { useAuth } from "../hooks/useAuth";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -41,6 +43,7 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const [isActionPlanOpen, setIsActionPlanOpen] = useState(true);
   const pathname = usePathname();
+  const { user } = useAuth();
 
   const navItemClass = (href: string, exact = false) => {
     const isActive = exact ? pathname === href : pathname?.startsWith(href);
@@ -129,10 +132,22 @@ export default function Sidebar() {
           Gallery
         </Link>
 
-        <Link href="/dashboard/settings" className={navItemClass("/dashboard/settings")}>
-          <Settings className="w-5 h-5" />
-          Site Settings
-        </Link>
+        {/* Tool Settings & Admin */}
+        <div className="pt-4 mt-2 border-t border-white/5 flex flex-col gap-2">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold px-4 block">
+            Tool Settings & Admin
+          </span>
+          <Link href="/dashboard/settings" className={navItemClass("/dashboard/settings")}>
+            <Settings className="w-5 h-5" />
+            Site Settings
+          </Link>
+          {user?.role === "admin" && (
+            <Link href="/dashboard/settings/users" className={navItemClass("/dashboard/settings/users")}>
+              <UserCheck className="w-5 h-5" />
+              User Management
+            </Link>
+          )}
+        </div>
       </nav>
     </div>
   );

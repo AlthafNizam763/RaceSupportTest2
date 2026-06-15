@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useRealtimeCollection } from "../../../hooks/useRealtimeCollection";
+import { useAuth } from "../../../hooks/useAuth";
 import { createDocument, updateDocument, deleteDocument, updateOrderBatch } from "../../../lib/firebase/firestore";
 import { uploadImage } from "../../../lib/firebase/storage";
+import { getDeleteConfirmationMessage } from "../../../lib/messages";
 import { DraggableList } from "../../../components/DraggableList";
 import { AIContentGenerator } from "../../../components/AIContentGenerator";
 import { Plus, Pencil, Trash2, Image as ImageIcon, Video, X, Loader2 } from "lucide-react";
@@ -19,6 +21,8 @@ interface MediaItem {
 
 export default function GalleryPage() {
   const { data: media, loading } = useRealtimeCollection<MediaItem>("gallery");
+  const { user } = useAuth();
+  const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MediaItem | null>(null);
   const [activeTab, setActiveTab] = useState<"image" | "video">("image");
@@ -62,6 +66,7 @@ export default function GalleryPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewer) return;
     try {
       if (editingItem) {
         await updateDocument("gallery", editingItem.id, { ...formData, type: activeTab });
@@ -77,8 +82,9 @@ export default function GalleryPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Remove this media?")) {
+  const handleDelete = async (id: string, title?: string) => {
+    if (isViewer) return;
+    if (confirm(getDeleteConfirmationMessage("media item", title))) {
       try {
         await deleteDocument("gallery", id);
         toast.success("Deleted successfully.");
@@ -89,6 +95,7 @@ export default function GalleryPage() {
   };
 
   const handleReorder = async (reorderedItems: MediaItem[]) => {
+    if (isViewer) return;
     try {
       const updates = reorderedItems.map((item, index) => ({ id: item.id, order: index }));
       await updateOrderBatch("gallery", updates);
@@ -108,12 +115,14 @@ export default function GalleryPage() {
           </h1>
           <p className="text-muted-foreground mt-1">Upload and reorder images and videos for the public gallery.</p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
-        >
-          <Plus className="w-5 h-5" /> Add Media
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => handleOpenModal()}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
+          >
+            <Plus className="w-5 h-5" /> Add Media
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-4 mb-6 bg-slate-900/50 p-1.5 rounded-xl border border-white/5 w-fit">
@@ -138,6 +147,7 @@ export default function GalleryPage() {
           </div>
         ) : (
           <DraggableList
+            disabled={isViewer}
             items={activeMedia}
             onReorder={handleReorder}
             renderItem={(item) => (
@@ -160,22 +170,24 @@ export default function GalleryPage() {
                   <h3 className="text-lg font-semibold text-white">{item.title || "Untitled Media"}</h3>
                   <a href={item.url} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300 truncate block max-w-sm mt-1">{item.url}</a>
                 </div>
-                <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
-                  <button
-                    onClick={() => handleOpenModal(item)}
-                    className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {!isViewer && (
+                  <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
+                    <button
+                      onClick={() => handleOpenModal(item)}
+                      className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id, item.title)}
+                      className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           />

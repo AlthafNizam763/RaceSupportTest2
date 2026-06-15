@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useRealtimeCollection } from "../../../../hooks/useRealtimeCollection";
+import { useAuth } from "../../../../hooks/useAuth";
 import { createDocument, updateDocument, deleteDocument, updateOrderBatch } from "../../../../lib/firebase/firestore";
 import { DraggableList } from "../../../../components/DraggableList";
+import { getDeleteConfirmationMessage } from "../../../../lib/messages";
 import { AIContentGenerator } from "../../../../components/AIContentGenerator";
 import { Plus, Pencil, Trash2, Calendar, Image as ImageIcon, X } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +21,8 @@ interface EventItem {
 
 export default function EventsPage() {
   const { data: events, loading } = useRealtimeCollection<EventItem>("events");
+  const { user } = useAuth();
+  const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<EventItem | null>(null);
 
@@ -48,6 +52,7 @@ export default function EventsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewer) return;
     try {
       if (editingItem) {
         await updateDocument("events", editingItem.id, formData);
@@ -63,8 +68,9 @@ export default function EventsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this event?")) {
+  const handleDelete = async (id: string, title?: string) => {
+    if (isViewer) return;
+    if (confirm(getDeleteConfirmationMessage("event", title))) {
       try {
         await deleteDocument("events", id);
         toast.success("Event deleted.");
@@ -75,6 +81,7 @@ export default function EventsPage() {
   };
 
   const handleReorder = async (reorderedItems: EventItem[]) => {
+    if (isViewer) return;
     try {
       // Create batch update payload
       const updates = reorderedItems.map((item, index) => ({
@@ -96,12 +103,14 @@ export default function EventsPage() {
           <h1 className="text-3xl font-bold text-white tracking-tight">Events Management</h1>
           <p className="text-muted-foreground mt-1">Manage ongoing and past events with drag-and-drop reordering.</p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
-        >
-          <Plus className="w-5 h-5" /> Add New Event
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => handleOpenModal()}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
+          >
+            <Plus className="w-5 h-5" /> Add New Event
+          </button>
+        )}
       </div>
 
       <div className="bg-slate-900/50 p-6 rounded-2xl border border-white/5 shadow-xl min-h-[400px]">
@@ -111,6 +120,7 @@ export default function EventsPage() {
           </div>
         ) : (
           <DraggableList
+            disabled={isViewer}
             items={events}
             onReorder={handleReorder}
             renderItem={(item) => (
@@ -130,22 +140,24 @@ export default function EventsPage() {
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-1">{item.description}</p>
                 </div>
-                <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
-                  <button
-                    onClick={() => handleOpenModal(item)}
-                    className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {!isViewer && (
+                  <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
+                    <button
+                      onClick={() => handleOpenModal(item)}
+                      className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id, item.title)}
+                      className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           />

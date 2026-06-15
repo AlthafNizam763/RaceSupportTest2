@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { registerWithEmailPassword } from "@/lib/server/firebase-auth";
 import { errorResponse, successResponse } from "@/lib/server/responses";
 import { applySessionCookies } from "@/lib/server/session";
+import { getAdminFirestore } from "@/lib/server/firebase-admin";
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,8 +14,28 @@ export async function POST(request: NextRequest) {
     }
 
     const session = await registerWithEmailPassword(name, email, password);
+
+    // Create a record in Firestore users collection
+    const db = getAdminFirestore();
+    const userRef = db.collection("users").doc(session.user.uid);
+    const adminsSnapshot = await db.collection("users").where("role", "==", "admin").limit(1).get();
+    const role = adminsSnapshot.empty ? "admin" : "editor";
+
+    await userRef.set({
+      uid: session.user.uid,
+      name,
+      email,
+      role,
+      createdAt: new Date().toISOString(),
+    });
+
     const response = successResponse(
-      { user: session.user },
+      {
+        user: {
+          ...session.user,
+          role,
+        },
+      },
       "Account created successfully. Verification email sent.",
       201
     );

@@ -72,3 +72,16 @@ export const ReorderSchema = z.array(
     order: z.number().int().nonnegative(),
   })
 );
+
+export const AdminUserCreateSchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  email: z.string().trim().email("Valid email required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  role: z.enum(["admin", "editor", "viewer"]),
+});
+
+export const AdminUserUpdateSchema = z.object({
+  role: z.enum(["admin", "editor", "viewer"]).optional(),
+  disabled: z.boolean().optional(),
+});
+

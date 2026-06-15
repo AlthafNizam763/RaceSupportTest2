@@ -8,6 +8,8 @@ import { DraggableList } from "./DraggableList";
 import { AIContentGenerator } from "./AIContentGenerator";
 import { Plus, Pencil, Trash2, Image as ImageIcon, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "../hooks/useAuth";
+import { getDeleteConfirmationMessage } from "../lib/messages";
 
 interface ActionPlanItem {
   id: string;
@@ -25,6 +27,8 @@ interface Props {
 
 export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle }: Props) {
   const { data: items, loading } = useRealtimeCollection<ActionPlanItem>(collectionName);
+  const { user } = useAuth();
+  const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ActionPlanItem | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -75,6 +79,7 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewer) return;
     try {
       if (editingItem) {
         await updateDocument(collectionName, editingItem.id, formData);
@@ -90,8 +95,9 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this item?")) {
+  const handleDelete = async (id: string, itemTitle?: string) => {
+    if (isViewer) return;
+    if (confirm(getDeleteConfirmationMessage("item", itemTitle))) {
       try {
         await deleteDocument(collectionName, id);
         toast.success("Item deleted.");
@@ -102,6 +108,7 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
   };
 
   const handleReorder = async (reorderedItems: ActionPlanItem[]) => {
+    if (isViewer) return;
     try {
       const updates = reorderedItems.map((item, index) => ({ id: item.id, order: index }));
       await updateOrderBatch(collectionName, updates);
@@ -118,12 +125,14 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
           <h1 className="text-3xl font-bold text-white tracking-tight">{pageTitle}</h1>
           <p className="text-muted-foreground mt-1">{pageSubtitle}</p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
-        >
-          <Plus className="w-5 h-5" /> Add New Item
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => handleOpenModal()}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
+          >
+            <Plus className="w-5 h-5" /> Add New Item
+          </button>
+        )}
       </div>
 
       <div className="bg-slate-900/50 p-6 rounded-2xl border border-white/5 shadow-xl min-h-[400px]">
@@ -133,6 +142,7 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
           </div>
         ) : (
           <DraggableList
+            disabled={isViewer}
             items={items}
             onReorder={handleReorder}
             renderItem={(item) => (
@@ -156,22 +166,24 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
-                  <button
-                    onClick={() => handleOpenModal(item)}
-                    className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {!isViewer && (
+                  <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
+                    <button
+                      onClick={() => handleOpenModal(item)}
+                      className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id, item.title)}
+                      className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           />

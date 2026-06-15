@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useRealtimeCollection } from "../../../hooks/useRealtimeCollection";
+import { useAuth } from "../../../hooks/useAuth";
 import { createDocument, updateDocument, deleteDocument, updateOrderBatch } from "../../../lib/firebase/firestore";
 import { uploadImage } from "../../../lib/firebase/storage";
+import { getDeleteConfirmationMessage } from "../../../lib/messages";
 import { DraggableList } from "../../../components/DraggableList";
 import { AIContentGenerator } from "../../../components/AIContentGenerator";
 import { Plus, Pencil, Trash2, Image as ImageIcon, X, Loader2, Star } from "lucide-react";
@@ -19,6 +21,8 @@ interface Changemaker {
 
 export default function ChangemakersPage() {
   const { data: members, loading } = useRealtimeCollection<Changemaker>("changemakers");
+  const { user } = useAuth();
+  const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Changemaker | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -61,6 +65,7 @@ export default function ChangemakersPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewer) return;
     try {
       if (editingItem) {
         await updateDocument("changemakers", editingItem.id, formData);
@@ -76,8 +81,9 @@ export default function ChangemakersPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Remove this changemaker?")) {
+  const handleDelete = async (id: string, name?: string) => {
+    if (isViewer) return;
+    if (confirm(getDeleteConfirmationMessage("changemaker", name))) {
       try {
         await deleteDocument("changemakers", id);
         toast.success("Deleted successfully.");
@@ -88,6 +94,7 @@ export default function ChangemakersPage() {
   };
 
   const handleReorder = async (reorderedItems: Changemaker[]) => {
+    if (isViewer) return;
     try {
       const updates = reorderedItems.map((item, index) => ({ id: item.id, order: index }));
       await updateOrderBatch("changemakers", updates);
@@ -107,12 +114,14 @@ export default function ChangemakersPage() {
           </h1>
           <p className="text-muted-foreground mt-1">Manage the profiles of notable changemakers.</p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
-        >
-          <Plus className="w-5 h-5" /> Add Changemaker
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => handleOpenModal()}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition"
+          >
+            <Plus className="w-5 h-5" /> Add Changemaker
+          </button>
+        )}
       </div>
 
       <div className="bg-slate-900/50 p-6 rounded-2xl border border-white/5 shadow-xl min-h-[400px]">
@@ -122,6 +131,7 @@ export default function ChangemakersPage() {
           </div>
         ) : (
           <DraggableList
+            disabled={isViewer}
             items={members}
             onReorder={handleReorder}
             renderItem={(item) => (
@@ -140,22 +150,24 @@ export default function ChangemakersPage() {
                   <h3 className="text-lg font-semibold text-white">{item.name}</h3>
                   <p className="text-sm text-yellow-500 font-medium">{item.title}</p>
                 </div>
-                <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
-                  <button
-                    onClick={() => handleOpenModal(item)}
-                    className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {!isViewer && (
+                  <div className="flex items-center gap-2 mt-4 md:mt-0 shrink-0">
+                    <button
+                      onClick={() => handleOpenModal(item)}
+                      className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-blue-400 transition"
+                      title="Edit"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id, item.name)}
+                      className="p-2 bg-white/5 hover:bg-destructive/20 rounded-lg text-red-500 transition"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           />

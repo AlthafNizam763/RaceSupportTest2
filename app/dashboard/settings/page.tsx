@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRealtimeCollection } from "../../../hooks/useRealtimeCollection";
+import { useAuth } from "../../../hooks/useAuth";
 import { updateDocument, createDocument } from "../../../lib/firebase/firestore";
 import { 
   Settings, 
@@ -22,6 +23,8 @@ import { motion } from "framer-motion";
 
 export default function SettingsPage() {
   const { data: settingsData, loading } = useRealtimeCollection("settings");
+  const { user } = useAuth();
+  const isViewer = user?.role === "viewer";
   const [isSaving, setIsSaving] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -218,11 +221,12 @@ export default function SettingsPage() {
            </div>
            <button 
             type="submit" 
-            disabled={isSaving}
+            disabled={isSaving || isViewer}
             className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-3 rounded-lg font-bold transition shadow-lg shadow-primary/20 disabled:opacity-50"
+            title={isViewer ? "Viewers cannot modify settings" : "Save Settings"}
           >
             {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-            Save Settings
+            {isViewer ? "Read-Only Mode" : "Save Settings"}
           </button>
         </div>
       </form>

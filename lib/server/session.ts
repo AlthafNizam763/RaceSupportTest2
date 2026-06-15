@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { createSessionFromIdToken, refreshAuthSession, type AuthSession } from "@/lib/server/firebase-auth";
+import { getAdminFirestore } from "@/lib/server/firebase-admin";
 
 const SESSION_COOKIE_NAME = "race_cms_session";
 const REFRESH_COOKIE_NAME = "race_cms_refresh";
@@ -108,4 +109,63 @@ export async function requireSession(request: NextRequest): Promise<Authenticate
 
 export function getSessionCookieName() {
   return SESSION_COOKIE_NAME;
+}
+
+export async function getUserRoleServer(uid: string, email?: string, name?: string): Promise<string> {
+  const db = getAdminFirestore();
+  const userRef = db.collection("users").doc(uid);
+  try {
+    const doc = await userRef.get();
+    if (doc.exists) {
+      return doc.data()?.role || "editor";
+    }
+    
+    // Auto-create document if it doesn't exist to ensure consistency.
+    // If no other admin exists in the users collection, assign the admin role to this first user.
+    const adminsSnapshot = await db.collection("users").where("role", "==", "admin").limit(1).get();
+    const role = adminsSnapshot.empty ? "admin" : "editor";
+    await userRef.set({
+      uid,
+      name: name || email || "User",
+      email: email || "",
+      role,
+      createdAt: new Date().toISOString(),
+    });
+    return role;
+  } catch (error) {
+    console.error("Error fetching/initializing user role:", error);
+    return "editor";
+  }
+}
+
+export async function requireWriteAccess(request: NextRequest) {
+  const sessionState = await requireSession(request);
+  if (!sessionState) return null;
+
+  const role = await getUserRoleServer(
+    sessionState.session.user.uid,
+    sessionState.session.user.email,
+    sessionState.session.user.displayName
+  );
+  if (role === "viewer") {
+    return null;
+  }
+
+  return sessionState;
+}
+
+export async function requireAdminSession(request: NextRequest) {
+  const sessionState = await requireSession(request);
+  if (!sessionState) return null;
+
+  const role = await getUserRoleServer(
+    sessionState.session.user.uid,
+    sessionState.session.user.email,
+    sessionState.session.user.displayName
+  );
+  if (role !== "admin") {
+    return null;
+  }
+
+  return sessionState;
 }

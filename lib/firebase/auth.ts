@@ -7,6 +7,7 @@ export interface SessionUser {
   displayName: string;
   emailVerified: boolean;
   photoUrl?: string;
+  role?: string;
 }
 
 interface SessionPayload {

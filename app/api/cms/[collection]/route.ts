@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { listDocuments, createDocument, updateDocument } from "@/lib/server/firestore";
 import { resolveCmsCollection } from "@/lib/server/cms-config";
 import { errorResponse, successResponse } from "@/lib/server/responses";
-import { applySessionCookies, requireSession } from "@/lib/server/session";
+import { applySessionCookies, requireSession, requireWriteAccess } from "@/lib/server/session";
 
 export const runtime = "nodejs";
 
@@ -42,6 +42,11 @@ export async function POST(
   const sessionState = await requireSession(request);
   if (!sessionState) {
     return errorResponse("Unauthorized access.", 401);
+  }
+
+  const writeState = await requireWriteAccess(request);
+  if (!writeState) {
+    return errorResponse("Permission denied. Viewers cannot modify content.", 403);
   }
 
   try {
