@@ -5,6 +5,7 @@ import { useRealtimeCollection } from "../../../hooks/useRealtimeCollection";
 import { useAuth } from "../../../hooks/useAuth";
 import { updateDocument, deleteDocument } from "../../../lib/firebase/firestore";
 import { getDeleteConfirmationMessage } from "../../../lib/messages";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import { 
   Ticket, 
   Clock, 
@@ -33,6 +34,7 @@ interface TicketItem {
 export default function TicketsPage() {
   const { data: tickets, loading } = useRealtimeCollection<TicketItem>("tickets");
   const { user } = useAuth();
+  const confirm = useConfirm();
   const isViewer = user?.role === "viewer";
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -77,7 +79,14 @@ export default function TicketsPage() {
 
   const handleDelete = async (id: string, subject?: string) => {
     if (isViewer) return;
-    if (confirm(getDeleteConfirmationMessage("support ticket", subject))) {
+    const isConfirmed = await confirm({
+      title: "Delete Support Ticket?",
+      message: getDeleteConfirmationMessage("support ticket", subject),
+      confirmText: "Delete Ticket",
+      variant: "danger",
+    });
+
+    if (isConfirmed) {
       try {
         await deleteDocument("tickets", id);
         toast.success("Ticket deleted");

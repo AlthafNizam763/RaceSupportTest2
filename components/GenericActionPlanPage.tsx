@@ -10,6 +10,7 @@ import { Plus, Pencil, Trash2, Image as ImageIcon, X, Loader2 } from "lucide-rea
 import { toast } from "sonner";
 import { useAuth } from "../hooks/useAuth";
 import { getDeleteConfirmationMessage } from "../lib/messages";
+import { useConfirm } from "./ConfirmDialog";
 
 interface ActionPlanItem {
   id: string;
@@ -28,6 +29,7 @@ interface Props {
 export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle }: Props) {
   const { data: items, loading } = useRealtimeCollection<ActionPlanItem>(collectionName);
   const { user } = useAuth();
+  const confirm = useConfirm();
   const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ActionPlanItem | null>(null);
@@ -97,7 +99,14 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
 
   const handleDelete = async (id: string, itemTitle?: string) => {
     if (isViewer) return;
-    if (confirm(getDeleteConfirmationMessage("item", itemTitle))) {
+    const isConfirmed = await confirm({
+      title: `Delete ${pageTitle} Item?`,
+      message: getDeleteConfirmationMessage("item", itemTitle),
+      confirmText: "Delete",
+      variant: "danger",
+    });
+
+    if (isConfirmed) {
       try {
         await deleteDocument(collectionName, id);
         toast.success("Item deleted.");

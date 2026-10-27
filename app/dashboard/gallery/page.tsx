@@ -6,6 +6,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { createDocument, updateDocument, deleteDocument, updateOrderBatch } from "../../../lib/firebase/firestore";
 import { uploadImage } from "../../../lib/firebase/storage";
 import { getDeleteConfirmationMessage } from "../../../lib/messages";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import { DraggableList } from "../../../components/DraggableList";
 import { AIContentGenerator } from "../../../components/AIContentGenerator";
 import { Plus, Pencil, Trash2, Image as ImageIcon, Video, X, Loader2 } from "lucide-react";
@@ -22,6 +23,7 @@ interface MediaItem {
 export default function GalleryPage() {
   const { data: media, loading } = useRealtimeCollection<MediaItem>("gallery");
   const { user } = useAuth();
+  const confirm = useConfirm();
   const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MediaItem | null>(null);
@@ -84,7 +86,14 @@ export default function GalleryPage() {
 
   const handleDelete = async (id: string, title?: string) => {
     if (isViewer) return;
-    if (confirm(getDeleteConfirmationMessage("media item", title))) {
+    const isConfirmed = await confirm({
+      title: "Delete Media Item?",
+      message: getDeleteConfirmationMessage("media item", title),
+      confirmText: "Delete",
+      variant: "danger",
+    });
+
+    if (isConfirmed) {
       try {
         await deleteDocument("gallery", id);
         toast.success("Deleted successfully.");

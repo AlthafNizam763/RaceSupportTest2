@@ -6,6 +6,7 @@ import { useAuth } from "../../../../hooks/useAuth";
 import { createDocument, updateDocument, deleteDocument, updateOrderBatch } from "../../../../lib/firebase/firestore";
 import { DraggableList } from "../../../../components/DraggableList";
 import { getDeleteConfirmationMessage } from "../../../../lib/messages";
+import { useConfirm } from "../../../../components/ConfirmDialog";
 import { AIContentGenerator } from "../../../../components/AIContentGenerator";
 import { Plus, Pencil, Trash2, Calendar, Image as ImageIcon, X } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ interface EventItem {
 export default function EventsPage() {
   const { data: events, loading } = useRealtimeCollection<EventItem>("events");
   const { user } = useAuth();
+  const confirm = useConfirm();
   const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<EventItem | null>(null);
@@ -70,7 +72,14 @@ export default function EventsPage() {
 
   const handleDelete = async (id: string, title?: string) => {
     if (isViewer) return;
-    if (confirm(getDeleteConfirmationMessage("event", title))) {
+    const isConfirmed = await confirm({
+      title: "Delete Event?",
+      message: getDeleteConfirmationMessage("event", title),
+      confirmText: "Delete Event",
+      variant: "danger",
+    });
+
+    if (isConfirmed) {
       try {
         await deleteDocument("events", id);
         toast.success("Event deleted.");

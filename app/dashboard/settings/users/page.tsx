@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../../../../hooks/useAuth";
 import { apiFetch, jsonRequest } from "../../../../lib/api/fetcher";
 import { getDeleteConfirmationMessage } from "../../../../lib/messages";
+import { useConfirm } from "../../../../components/ConfirmDialog";
 import { 
   UserCheck, 
   Search, 
@@ -38,6 +39,7 @@ interface UserProfile {
 export default function UserManagementPage() {
   const { user: currentUser, loading: authLoading } = useAuth();
   const router = useRouter();
+  const confirm = useConfirm();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,7 +129,14 @@ export default function UserManagementPage() {
   };
 
   const handleDeleteUser = async (uid: string, email: string) => {
-    if (confirm(getDeleteConfirmationMessage("user", email))) {
+    const isConfirmed = await confirm({
+      title: "Delete User Account?",
+      message: getDeleteConfirmationMessage("user", email),
+      confirmText: "Delete User",
+      variant: "danger",
+    });
+
+    if (isConfirmed) {
       try {
         await apiFetch(`/api/admin/users/${uid}`, {
           method: "DELETE"

@@ -6,6 +6,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { createDocument, updateDocument, deleteDocument, updateOrderBatch } from "../../../lib/firebase/firestore";
 import { uploadImage } from "../../../lib/firebase/storage";
 import { getDeleteConfirmationMessage } from "../../../lib/messages";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import { DraggableList } from "../../../components/DraggableList";
 import { AIContentGenerator } from "../../../components/AIContentGenerator";
 import { Plus, Pencil, Trash2, Image as ImageIcon, X, Loader2, Star } from "lucide-react";
@@ -22,6 +23,7 @@ interface Changemaker {
 export default function ChangemakersPage() {
   const { data: members, loading } = useRealtimeCollection<Changemaker>("changemakers");
   const { user } = useAuth();
+  const confirm = useConfirm();
   const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Changemaker | null>(null);
@@ -83,7 +85,14 @@ export default function ChangemakersPage() {
 
   const handleDelete = async (id: string, name?: string) => {
     if (isViewer) return;
-    if (confirm(getDeleteConfirmationMessage("changemaker", name))) {
+    const isConfirmed = await confirm({
+      title: "Delete Changemaker?",
+      message: getDeleteConfirmationMessage("changemaker", name),
+      confirmText: "Delete",
+      variant: "danger",
+    });
+
+    if (isConfirmed) {
       try {
         await deleteDocument("changemakers", id);
         toast.success("Deleted successfully.");

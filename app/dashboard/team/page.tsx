@@ -6,6 +6,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { createDocument, updateDocument, deleteDocument, updateOrderBatch } from "../../../lib/firebase/firestore";
 import { uploadImage } from "../../../lib/firebase/storage";
 import { getDeleteConfirmationMessage } from "../../../lib/messages";
+import { useConfirm } from "../../../components/ConfirmDialog";
 import { DraggableList } from "../../../components/DraggableList";
 import { AIContentGenerator } from "../../../components/AIContentGenerator";
 import { Plus, Pencil, Trash2, Image as ImageIcon, X, Loader2, Link as LinkIcon, Award } from "lucide-react";
@@ -26,6 +27,7 @@ interface TeamMember {
 export default function TeamPage() {
   const { data: members, loading } = useRealtimeCollection<TeamMember>("team_members");
   const { user } = useAuth();
+  const confirm = useConfirm();
   const isViewer = user?.role === "viewer";
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TeamMember | null>(null);
@@ -96,7 +98,14 @@ export default function TeamPage() {
 
   const handleDelete = async (id: string, name?: string) => {
     if (isViewer) return;
-    if (confirm(getDeleteConfirmationMessage("team member", name))) {
+    const isConfirmed = await confirm({
+      title: "Delete Team Member?",
+      message: getDeleteConfirmationMessage("team member", name),
+      confirmText: "Delete Member",
+      variant: "danger",
+    });
+
+    if (isConfirmed) {
       try {
         await deleteDocument("team_members", id);
         toast.success("Member deleted.");
