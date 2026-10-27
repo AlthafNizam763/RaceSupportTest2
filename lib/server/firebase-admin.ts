@@ -21,6 +21,16 @@ function readServiceAccount() {
     return JSON.parse(contents);
   }
 
+  if (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+    return {
+      projectId:
+        process.env.FIREBASE_PROJECT_ID ||
+        process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    };
+  }
+
   return null;
 }
 
@@ -30,10 +40,11 @@ export function getAdminApp() {
     return existing[0];
   }
 
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const projectId =
+    process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   if (!projectId) {
     throw new Error(
-      "Missing NEXT_PUBLIC_FIREBASE_PROJECT_ID. Set it in .env.local (Firebase Console → Project settings)."
+      "Missing FIREBASE_PROJECT_ID or NEXT_PUBLIC_FIREBASE_PROJECT_ID. Set it in .env (Firebase Console → Project settings)."
     );
   }
 
@@ -47,7 +58,7 @@ export function getAdminApp() {
 
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     throw new Error(
-      "Firebase Admin credentials not configured. Set FIREBASE_ADMIN_SERVICE_ACCOUNT (JSON), FIREBASE_ADMIN_SERVICE_ACCOUNT_BASE64 (base64 JSON), FIREBASE_ADMIN_SERVICE_ACCOUNT_PATH (file path), or GOOGLE_APPLICATION_CREDENTIALS."
+      "Firebase Admin credentials not configured. Set FIREBASE_ADMIN_SERVICE_ACCOUNT (JSON), FIREBASE_ADMIN_SERVICE_ACCOUNT_BASE64 (base64 JSON), FIREBASE_ADMIN_SERVICE_ACCOUNT_PATH (file path), FIREBASE_CLIENT_EMAIL & FIREBASE_PRIVATE_KEY, or GOOGLE_APPLICATION_CREDENTIALS."
     );
   }
 

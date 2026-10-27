@@ -67,8 +67,15 @@ export function clearSessionCookies(response: NextResponse, request?: NextReques
 }
 
 export async function getSessionState(request: NextRequest): Promise<SessionState> {
-  const idToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  let idToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
+
+  if (!idToken) {
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      idToken = authHeader.substring(7).trim();
+    }
+  }
 
   if (!idToken) {
     return { session: null, refreshed: false };
@@ -168,4 +175,38 @@ export async function requireAdminSession(request: NextRequest) {
   }
 
   return sessionState;
+}
+
+export async function assertAdminSession(request: NextRequest) {
+  const sessionState = await requireSession(request);
+  if (!sessionState) {
+    return {
+      ok: false as const,
+      status: 401 as const,
+      message: "Authentication required. Please sign in to continue.",
+      sessionState: null,
+    };
+  }
+
+  const role = await getUserRoleServer(
+    sessionState.session.user.uid,
+    sessionState.session.user.email,
+    sessionState.session.user.displayName
+  );
+
+  if (role !== "admin") {
+    return {
+      ok: false as const,
+      status: 403 as const,
+      message: "Permission denied. Administrator privileges required.",
+      sessionState: null,
+    };
+  }
+
+  return {
+    ok: true as const,
+    sessionState,
+    role,
+    user: sessionState.session.user,
+  };
 }

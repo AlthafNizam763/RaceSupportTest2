@@ -20,7 +20,8 @@ import {
   Star,
   Ticket,
   Settings,
-  UserCheck
+  UserCheck,
+  CloudUpload
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { clsx, type ClassValue } from "clsx";
@@ -130,6 +131,11 @@ export default function Sidebar() {
         <Link href="/dashboard/gallery" className={navItemClass("/dashboard/gallery")}>
           <ImageIcon className="w-5 h-5" />
           Gallery
+        </Link>
+
+        <Link href="/dashboard/media" className={navItemClass("/dashboard/media")}>
+          <CloudUpload className="w-5 h-5 text-primary/80" />
+          Media Library
         </Link>
 
         {/* Tool Settings & Admin */}
