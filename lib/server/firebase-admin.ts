@@ -56,14 +56,14 @@ export function getAdminApp() {
     });
   }
 
-  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    throw new Error(
-      "Firebase Admin credentials not configured. Set FIREBASE_ADMIN_SERVICE_ACCOUNT (JSON), FIREBASE_ADMIN_SERVICE_ACCOUNT_BASE64 (base64 JSON), FIREBASE_ADMIN_SERVICE_ACCOUNT_PATH (file path), FIREBASE_CLIENT_EMAIL & FIREBASE_PRIVATE_KEY, or GOOGLE_APPLICATION_CREDENTIALS."
-    );
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    return initializeApp({
+      credential: applicationDefault(),
+      projectId,
+    });
   }
 
   return initializeApp({
-    credential: applicationDefault(),
     projectId,
   });
 }

@@ -178,6 +178,27 @@ export async function requireAdminSession(request: NextRequest) {
 }
 
 export async function assertAdminSession(request: NextRequest) {
+  // Check for server-to-server integration key
+  const expectedKey = process.env.RACE_CMS_INTEGRATION_KEY || process.env.CMS_INTEGRATION_KEY;
+  if (expectedKey) {
+    const authHeader = request.headers.get("authorization");
+    const headerKey = request.headers.get("x-cms-api-key") || 
+      (authHeader?.startsWith("Bearer ") ? authHeader.substring(7).trim() : null);
+
+    if (headerKey && headerKey === expectedKey) {
+      return {
+        ok: true as const,
+        sessionState: null,
+        role: "admin",
+        user: {
+          uid: "system_integration",
+          email: "integration@raceindia.org",
+          displayName: "Race Integration Service",
+        },
+      };
+    }
+  }
+
   const sessionState = await requireSession(request);
   if (!sessionState) {
     return {

@@ -13,6 +13,51 @@ interface RouteParams {
   };
 }
 
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const auth = await assertAdminSession(request);
+  if (!auth.ok) {
+    return errorResponse(auth.message, auth.status);
+  }
+
+  const { id } = params;
+  if (!id || typeof id !== "string") {
+    return errorResponse("Missing document id.", 400);
+  }
+
+  try {
+    const db = getAdminFirestore();
+    const docRef = db.collection("media").doc(id);
+    const docSnapshot = await docRef.get();
+
+    if (!docSnapshot.exists) {
+      return errorResponse("Media record not found.", 404);
+    }
+
+    const data = docSnapshot.data() || {};
+    return successResponse(
+      {
+        id: docSnapshot.id,
+        title: data.title || "",
+        fileId: data.fileId || "",
+        url: data.url || "",
+        fileName: data.fileName || "",
+        mediaType: data.mediaType || "image",
+        mimeType: data.mimeType || "",
+        size: data.size || 0,
+        folder: data.folder || "/admin-media",
+        uploadedBy: data.uploadedBy || "",
+        uploadedByEmail: data.uploadedByEmail || null,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || null,
+        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt || null,
+      },
+      "Media item retrieved successfully."
+    );
+  } catch (error: any) {
+    console.error("Error retrieving media item:", error);
+    return errorResponse(error.message || "Failed to retrieve media item.", 500);
+  }
+}
+
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const auth = await assertAdminSession(request);
   if (!auth.ok) {
