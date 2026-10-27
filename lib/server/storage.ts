@@ -91,13 +91,57 @@ async function uploadFilesLocally(files: File[], folder = "uploads"): Promise<Up
   );
 }
 
+async function uploadFilesToImageKit(files: File[], folder = "uploads"): Promise<UploadedAsset[]> {
+  const { getImageKitClient } = await import("@/lib/server/imagekit");
+  const ik = getImageKitClient();
+  const cleanFolder = folder.startsWith("/") ? folder : `/${folder}`;
+
+  return Promise.all(
+    files.map(async (file) => {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const res = await ik.files.upload({
+        file: buffer.toString("base64"),
+        fileName: file.name,
+        folder: cleanFolder,
+      });
+
+      return {
+        url: res.url || "",
+        path: `imagekit:${res.fileId || ""}`,
+        fileName: res.name || file.name,
+        contentType: file.type || "application/octet-stream",
+        size: res.size || file.size,
+      } satisfies UploadedAsset;
+    })
+  );
+}
+
 export async function uploadFilesToStorage(files: File[], folder = "uploads"): Promise<UploadedAsset[]> {
+  // 1. Prioritize ImageKit cloud upload when configured
+  if (process.env.IMAGEKIT_PRIVATE_KEY) {
+    try {
+      return await uploadFilesToImageKit(files, folder);
+    } catch (error: any) {
+      console.error("ImageKit upload failed, falling back to Firebase:", error?.message || error);
+    }
+  }
+
+  // 2. Fallback to Firebase Storage
   try {
     return await uploadFilesToFirebase(files, folder);
   } catch (error: any) {
-    console.error("Firebase Storage upload failed, attempting local fallback:", error?.message || error);
+    console.error("Firebase Storage upload failed:", error?.message || error);
+  }
+
+  // 3. Fallback to local filesystem ONLY in local development (never on serverless/Vercel read-only filesystem)
+  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  if (!isServerless && process.env.NODE_ENV !== "production") {
     return uploadFilesLocally(files, folder);
   }
+
+  throw new Error(
+    "Cloud storage upload failed. Please ensure ImageKit (IMAGEKIT_PRIVATE_KEY) or Firebase Storage is configured in your environment."
+  );
 }
 
 async function deleteLocalFile(target: string) {
@@ -122,6 +166,18 @@ async function deleteFromFirebase(target: string) {
 }
 
 export async function deleteFileFromStorage(target: string): Promise<void> {
+  if (target.startsWith("imagekit:")) {
+    try {
+      const { deleteImageKitFile } = await import("@/lib/server/imagekit");
+      const fileId = target.replace("imagekit:", "");
+      await deleteImageKitFile(fileId);
+      return;
+    } catch (err: any) {
+      console.warn("[storage] ImageKit delete failed:", err?.message || err);
+      return;
+    }
+  }
+
   if (target.startsWith("local:") || target.startsWith("/uploads/")) {
     await deleteLocalFile(target);
     return;
