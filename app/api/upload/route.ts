@@ -4,6 +4,9 @@ import { errorResponse, successResponse } from "@/lib/server/responses";
 import { applySessionCookies, requireSession, requireWriteAccess } from "@/lib/server/session";
 import { deleteFileFromStorage, uploadFilesToStorage } from "@/lib/server/storage";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 const ALLOWED_TYPES = new Set([
   "image/gif",
   "image/jpeg",
