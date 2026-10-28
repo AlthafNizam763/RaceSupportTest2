@@ -1,14 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
-import { assertAdminSession, applySessionCookies } from "@/lib/server/session";
+import { NextRequest } from "next/server";
+import { requireWriteAccess, assertAdminSession, applySessionCookies } from "@/lib/server/session";
 import { errorResponse, successResponse } from "@/lib/server/responses";
 import { getUploadAuthParams } from "@/lib/server/imagekit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const auth = await assertAdminSession(request);
-  if (!auth.ok) {
-    return errorResponse(auth.message, auth.status);
+  // Allow all users with write access (admin and editor) as well as integration keys
+  const writeSession = await requireWriteAccess(request);
+  let refreshedSession = writeSession?.refreshed ? writeSession.session : null;
+
+  if (!writeSession) {
+    // Check if integration key admin is present
+    const adminCheck = await assertAdminSession(request);
+    if (!adminCheck.ok) {
+      return errorResponse(adminCheck.message || "Permission denied. You must be an administrator or editor to upload media.", adminCheck.status || 403);
+    }
+    if (adminCheck.sessionState?.refreshed) {
+      refreshedSession = adminCheck.sessionState.session;
+    }
   }
 
   try {
@@ -23,8 +33,8 @@ export async function GET(request: NextRequest) {
     response.headers.set("Pragma", "no-cache");
     response.headers.set("Expires", "0");
 
-    if (auth.sessionState?.refreshed) {
-      applySessionCookies(response, auth.sessionState.session, request);
+    if (refreshedSession) {
+      applySessionCookies(response, refreshedSession, request);
     }
 
     return response;

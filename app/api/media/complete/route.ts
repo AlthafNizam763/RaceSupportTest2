@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminFirestore } from "@/lib/server/firebase-admin";
-import { assertAdminSession, applySessionCookies } from "@/lib/server/session";
+import { assertAdminSession, requireWriteAccess, applySessionCookies } from "@/lib/server/session";
 import { errorResponse, successResponse } from "@/lib/server/responses";
 import {
   getVerifiedImageKitFile,
@@ -100,9 +100,31 @@ async function processSingleFile(
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await assertAdminSession(request);
-  if (!auth.ok) {
-    return errorResponse(auth.message, auth.status);
+  let auth: { ok: boolean; message?: string; status?: number; user: { uid: string; email?: string | null }; sessionState?: any };
+
+  const writeSession = await requireWriteAccess(request);
+  if (writeSession) {
+    auth = {
+      ok: true,
+      user: {
+        uid: writeSession.session.user.uid,
+        email: writeSession.session.user.email,
+      },
+      sessionState: writeSession,
+    };
+  } else {
+    const adminCheck = await assertAdminSession(request);
+    if (!adminCheck.ok) {
+      return errorResponse(adminCheck.message || "Permission denied. Administrators or editors only.", adminCheck.status || 403);
+    }
+    auth = {
+      ok: true,
+      user: {
+        uid: adminCheck.user.uid,
+        email: adminCheck.user.email,
+      },
+      sessionState: adminCheck.sessionState,
+    };
   }
 
   try {
