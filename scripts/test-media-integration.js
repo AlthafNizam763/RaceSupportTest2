@@ -41,7 +41,7 @@ async function main() {
   console.log("--- 1. Validation Logic Tests ---");
 
   const ALLOWED_IMAGES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-  const ALLOWED_VIDEOS = new Set(["video/mp4", "video/webm"]);
+  const ALLOWED_VIDEOS = new Set(["video/mp4", "video/webm", "video/quicktime"]);
   const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
   const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
@@ -78,6 +78,10 @@ async function main() {
 
   runTest("Accepts valid WebM video under 100MB", () => {
     assert.strictEqual(validate("video/webm", 75 * 1024 * 1024), true);
+  });
+
+  runTest("Accepts valid MOV video under 100MB", () => {
+    assert.strictEqual(validate("video/quicktime", 80 * 1024 * 1024), true);
   });
 
   runTest("Rejects unsupported MIME types (e.g., text/plain, application/pdf, audio/mp3)", () => {

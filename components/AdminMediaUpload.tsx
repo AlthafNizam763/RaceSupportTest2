@@ -17,18 +17,23 @@ import {
   Copy,
   CheckCheck,
   Eye,
-  FileText,
   Search,
-  Filter,
+  RotateCcw,
+  CheckCircle2,
+  FileVideo,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { upload } from "@imagekit/javascript";
 import { useAuth } from "@/hooks/useAuth";
+import { useConfirm } from "@/components/ConfirmDialog";
 import {
   MediaItem,
   listMedia,
   updateMediaTitle,
   deleteMedia,
-  uploadMediaToImageKit,
+  getMediaAuth,
+  completeMediaUpload,
   validateMediaFile,
 } from "@/lib/api/media";
 
@@ -54,11 +59,25 @@ function formatDate(isoString?: string) {
   }
 }
 
+export interface UploadQueueItem {
+  id: string;
+  file: File;
+  previewUrl: string;
+  mediaType: "image" | "video";
+  title: string;
+  progress: number;
+  status: "idle" | "uploading" | "success" | "error";
+  errorMessage?: string;
+  fileId?: string;
+  uploadedItem?: MediaItem;
+}
+
 export default function AdminMediaUpload() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const confirm = useConfirm();
 
-  // State: media items & pagination
+  // State: media library items & pagination
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,32 +85,35 @@ export default function AdminMediaUpload() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
-  // Filters
+  // Filters & Search
   const [mediaTypeFilter, setMediaTypeFilter] = useState<"all" | "image" | "video">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Upload Form State
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [titleInput, setTitleInput] = useState("");
+  // Multi-file Upload Queue State
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Edit Title State
+  // Edit Title Modal State (for existing media in gallery)
   const [editingItem, setEditingItem] = useState<MediaItem | null>(null);
   const [editTitleValue, setEditTitleValue] = useState("");
   const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
 
-  // Delete Confirmation State
-  const [deletingItem, setDeletingItem] = useState<MediaItem | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  // Preview Modal
+  // Preview Lightbox Modal
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
 
   // Copied URL feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Cleanup object URLs when component unmounts
+  useEffect(() => {
+    return () => {
+      uploadQueue.forEach((item) => {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      });
+    };
+  }, []);
 
   // Fetch Media List
   const fetchMedia = useCallback(async () => {
@@ -119,25 +141,67 @@ export default function AdminMediaUpload() {
     fetchMedia();
   }, [fetchMedia]);
 
-  // Handle File Selection
-  const handleFileChange = (file: File | null) => {
-    if (!file) {
-      setSelectedFile(null);
-      return;
+  // Add multiple files to the upload queue
+  const addFilesToQueue = (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+
+    const newItems: UploadQueueItem[] = [];
+    let hasInvalid = false;
+
+    fileArray.forEach((file) => {
+      try {
+        const validated = validateMediaFile(file);
+        const previewUrl = URL.createObjectURL(file);
+        const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+        const formattedTitle = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+
+        newItems.push({
+          id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          file,
+          previewUrl,
+          mediaType: validated.mediaType,
+          title: formattedTitle,
+          progress: 0,
+          status: "idle",
+        });
+      } catch (err: any) {
+        hasInvalid = true;
+        toast.error(err.message || `File "${file.name}" is invalid.`);
+      }
+    });
+
+    if (newItems.length > 0) {
+      setUploadQueue((prev) => [...prev, ...newItems]);
+      toast.success(`Added ${newItems.length} file(s) to upload queue.`);
     }
 
-    try {
-      validateMediaFile(file);
-      setSelectedFile(file);
-      if (!titleInput.trim()) {
-        // Auto-fill title from clean filename
-        const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
-        setTitleInput(cleanName.charAt(0).toUpperCase() + cleanName.slice(1));
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Invalid file selected.");
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // Remove individual file from queue
+  const removeFromQueue = (id: string) => {
+    setUploadQueue((prev) => {
+      const item = prev.find((i) => i.id === id);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((i) => i.id !== id);
+    });
+  };
+
+  // Clear all non-uploading files from queue
+  const clearQueue = () => {
+    if (isUploading) return;
+    uploadQueue.forEach((item) => {
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    });
+    setUploadQueue([]);
+  };
+
+  // Update title of queued item
+  const updateQueueItemTitle = (id: string, newTitle: string) => {
+    setUploadQueue((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, title: newTitle } : item))
+    );
   };
 
   // Drag and drop handlers
@@ -145,52 +209,158 @@ export default function AdminMediaUpload() {
     e.preventDefault();
     setIsDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileChange(e.dataTransfer.files[0]);
+      addFilesToQueue(e.dataTransfer.files);
     }
   };
 
-  // Perform Upload
-  const handleUploadSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFile) {
-      toast.error("Please select a file to upload.");
-      return;
-    }
+  // Upload an individual queued file
+  const uploadSingleItem = async (
+    item: UploadQueueItem,
+    cachedAuth?: any
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // 1. Get auth parameters
+      const auth = cachedAuth || (await getMediaAuth());
 
+      // 2. Upload directly to ImageKit with progress
+      const uploadRes: any = await upload({
+        file: item.file,
+        fileName: item.file.name,
+        token: auth.token,
+        signature: auth.signature,
+        expire: auth.expire,
+        publicKey: auth.publicKey,
+        folder: "/admin-media",
+        onProgress: (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setUploadQueue((prev) =>
+              prev.map((i) => (i.id === item.id ? { ...i, progress: percent } : i))
+            );
+          }
+        },
+      });
+
+      if (!uploadRes?.fileId) {
+        throw new Error("Upload completed without ImageKit fileId.");
+      }
+
+      // 3. Persist verified metadata to Firestore
+      const saved = await completeMediaUpload({
+        fileId: uploadRes.fileId,
+        title: item.title.trim() || item.file.name.replace(/\.[^/.]+$/, ""),
+      });
+
+      setUploadQueue((prev) =>
+        prev.map((i) =>
+          i.id === item.id
+            ? { ...i, progress: 100, status: "success", uploadedItem: saved }
+            : i
+        )
+      );
+
+      return { success: true };
+    } catch (err: any) {
+      console.error(`Upload failed for ${item.file.name}:`, err);
+      const msg = err.message || "Upload failed.";
+      setUploadQueue((prev) =>
+        prev.map((i) =>
+          i.id === item.id ? { ...i, status: "error", errorMessage: msg } : i
+        )
+      );
+      return { success: false, error: msg };
+    }
+  };
+
+  // Start uploading all pending files
+  const handleStartUpload = async () => {
     if (!isAdmin) {
       toast.error("Only administrators can upload media.");
       return;
     }
 
+    const pending = uploadQueue.filter((i) => i.status === "idle" || i.status === "error");
+    if (pending.length === 0) {
+      toast.info("No pending files to upload.");
+      return;
+    }
+
     setIsUploading(true);
-    setUploadProgress(0);
 
     try {
-      const saved = await uploadMediaToImageKit(
-        selectedFile,
-        titleInput,
-        (progress) => setUploadProgress(progress)
+      // Fetch fresh auth credentials to share across batch
+      const auth = await getMediaAuth();
+
+      // Set items to uploading state
+      setUploadQueue((prev) =>
+        prev.map((i) =>
+          i.status === "idle" || i.status === "error"
+            ? { ...i, status: "uploading", progress: 0, errorMessage: undefined }
+            : i
+        )
       );
 
-      toast.success(`"${saved.title}" uploaded and saved to Firestore!`);
+      // Upload concurrently with concurrency limit of 3
+      const concurrencyLimit = 3;
+      const queueToProcess = [...pending];
+      let successCount = 0;
+      let failCount = 0;
 
-      // Reset form
-      setSelectedFile(null);
-      setTitleInput("");
-      setUploadProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      const runWorker = async () => {
+        while (queueToProcess.length > 0) {
+          const item = queueToProcess.shift();
+          if (!item) break;
+          const res = await uploadSingleItem(item, auth);
+          if (res.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        }
+      };
 
-      // Refresh media list without full reload
-      fetchMedia();
+      const workers = Array.from(
+        { length: Math.min(concurrencyLimit, pending.length) },
+        () => runWorker()
+      );
+
+      await Promise.all(workers);
+
+      if (successCount > 0) {
+        toast.success(`Successfully uploaded ${successCount} file(s) to ImageKit!`);
+        fetchMedia(); // Refresh media library without losing state
+      }
+
+      if (failCount > 0) {
+        toast.error(`${failCount} file(s) failed to upload. Click retry on failed items.`);
+      }
     } catch (err: any) {
-      console.error("Upload failed:", err);
-      toast.error(err.message || "Upload failed. Please check your connection and credentials.");
+      toast.error(err.message || "Failed to initialize upload session.");
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Perform Title Edit
+  // Retry an individual failed file
+  const handleRetryItem = async (item: UploadQueueItem) => {
+    setUploadQueue((prev) =>
+      prev.map((i) =>
+        i.id === item.id
+          ? { ...i, status: "uploading", progress: 0, errorMessage: undefined }
+          : i
+      )
+    );
+
+    const res = await uploadSingleItem(item);
+    if (res.success) {
+      toast.success(`"${item.title}" uploaded successfully!`);
+      fetchMedia();
+    } else {
+      toast.error(`Retry failed for "${item.file.name}".`);
+    }
+  };
+
+  // Perform Title Edit for existing media in gallery
   const handleSaveTitle = async () => {
     if (!editingItem) return;
     if (!editTitleValue.trim()) {
@@ -211,20 +381,23 @@ export default function AdminMediaUpload() {
     }
   };
 
-  // Perform Deletion
-  const handleDeleteConfirm = async () => {
-    if (!deletingItem) return;
+  // Perform Deletion of media from gallery
+  const handleDeleteItem = async (item: MediaItem) => {
+    const isConfirmed = await confirm({
+      title: "Delete Media Item?",
+      message: `Are you sure you want to permanently delete "${item.title}"? This action will remove the file from ImageKit and delete the record from Firestore.`,
+      confirmText: "Delete",
+      variant: "danger",
+    });
 
-    setIsDeleting(true);
-    try {
-      await deleteMedia(deletingItem.id);
-      toast.success(`"${deletingItem.title}" deleted from ImageKit and Firestore.`);
-      setDeletingItem(null);
-      fetchMedia();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete media.");
-    } finally {
-      setIsDeleting(false);
+    if (isConfirmed) {
+      try {
+        await deleteMedia(item.id);
+        toast.success(`"${item.title}" deleted.`);
+        fetchMedia();
+      } catch (err: any) {
+        toast.error(err.message || "Failed to delete media.");
+      }
     }
   };
 
@@ -236,7 +409,7 @@ export default function AdminMediaUpload() {
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  // Client-side search filter
+  // Client-side search filter for media library
   const filteredList = mediaList.filter((m) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -247,187 +420,274 @@ export default function AdminMediaUpload() {
     );
   });
 
+  const pendingCount = uploadQueue.filter(
+    (i) => i.status === "idle" || i.status === "error"
+  ).length;
+  const uploadingCount = uploadQueue.filter((i) => i.status === "uploading").length;
+  const successCount = uploadQueue.filter((i) => i.status === "success").length;
+
   return (
     <div className="space-y-8">
-      {/* ─── UPLOAD SECTION ─── */}
-      <section className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-xl shadow-2xl">
-        <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
+      {/* ─── MULTIPLE UPLOAD SECTION ─── */}
+      <section className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-xl shadow-2xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary">
               <UploadCloud className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Upload New Media</h2>
+              <h2 className="text-lg font-semibold text-white">Upload Images & Videos</h2>
               <p className="text-xs text-muted-foreground">
-                Direct ImageKit cloud upload with Firestore metadata synchronization
+                Batch upload multiple assets directly to ImageKit cloud with Firestore synchronization
               </p>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground/80 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-            <span>Images: ≤ 25MB (JPEG, PNG, WEBP, GIF)</span>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground/80 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
+            <span>Images: JPG, PNG, WEBP, GIF (≤ 25MB)</span>
             <span>•</span>
-            <span>Videos: ≤ 100MB (MP4, WEBM)</span>
+            <span>Videos: MP4, WEBM, MOV (≤ 100MB)</span>
           </div>
         </div>
 
-        <form onSubmit={handleUploadSubmit} className="space-y-4">
-          {/* Dropzone */}
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragOver(true);
+        {/* Dropzone with multiple file support */}
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragOver(true);
+          }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDrop={handleDrop}
+          onClick={() => !isUploading && fileInputRef.current?.click()}
+          className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
+            isDragOver
+              ? "border-primary bg-primary/10 scale-[0.99]"
+              : "border-white/15 hover:border-white/30 bg-black/20 hover:bg-black/30"
+          }`}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mov,.mp4,.webm,.jpg,.jpeg,.png,.webp,.gif"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) addFilesToQueue(e.target.files);
             }}
-            onDragLeave={() => setIsDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => !isUploading && fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
-              isDragOver
-                ? "border-primary bg-primary/10 scale-[0.99]"
-                : "border-white/15 hover:border-white/30 bg-black/20 hover:bg-black/30"
-            }`}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm"
-              className="hidden"
-              onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
-              disabled={isUploading}
-            />
+            disabled={isUploading}
+          />
 
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-muted-foreground border border-white/10">
-                <UploadCloud className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-white">
-                  {selectedFile ? (
-                    <span className="text-primary font-semibold">{selectedFile.name}</span>
-                  ) : (
-                    <span>
-                      Drag & drop your image or video here, or{" "}
-                      <span className="text-primary underline">browse files</span>
-                    </span>
-                  )}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Supports JPEG, PNG, WEBP, GIF (up to 25MB) and MP4, WEBM (up to 100MB)
-                </p>
-              </div>
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-muted-foreground border border-white/10">
+              <UploadCloud className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">
+                Drag & drop multiple images or videos here, or{" "}
+                <span className="text-primary underline font-semibold">browse files</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                You can select multiple files at once. Supports JPG, PNG, WEBP, GIF, MP4, WEBM, MOV.
+              </p>
             </div>
           </div>
+        </div>
 
-          {/* Selected File Details & Title Input */}
-          {selectedFile && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {selectedFile.type.startsWith("video/") ? (
-                    <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-lg">
-                      <VideoIcon className="w-4 h-4" />
-                    </div>
-                  ) : (
-                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg">
-                      <ImageIcon className="w-4 h-4" />
-                    </div>
-                  )}
-                  <div>
-                    <div className="text-sm font-medium text-white truncate max-w-xs sm:max-w-md">
-                      {selectedFile.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatBytes(selectedFile.size)} • {selectedFile.type || "Unknown type"}
-                    </div>
-                  </div>
-                </div>
-
-                {!isUploading && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedFile(null);
-                      if (fileInputRef.current) fileInputRef.current.value = "";
-                    }}
-                    className="p-1.5 text-muted-foreground hover:text-white rounded-lg hover:bg-white/10 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+        {/* Selected Upload Queue Cards */}
+        {uploadQueue.length > 0 && (
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between pb-2 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-white uppercase tracking-wider">
+                  Selected Files ({uploadQueue.length})
+                </span>
+                {successCount > 0 && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">
+                    {successCount} uploaded
+                  </span>
+                )}
+                {uploadingCount > 0 && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-medium flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    {uploadingCount} in progress
+                  </span>
                 )}
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">
-                  Media Title (stored in Firestore)
-                </label>
-                <input
-                  type="text"
-                  value={titleInput}
-                  onChange={(e) => setTitleInput(e.target.value)}
-                  placeholder="e.g. Student Leadership Workshop"
-                  disabled={isUploading}
-                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-muted-foreground focus:outline-none focus:border-primary transition-colors"
-                />
-              </div>
-
-              {/* Upload Progress Bar */}
-              {isUploading && (
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-primary font-medium flex items-center gap-1.5">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Uploading directly to ImageKit...
-                    </span>
-                    <span className="text-muted-foreground font-mono">{uploadProgress}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-black/60 rounded-full overflow-hidden border border-white/5">
-                    <div
-                      className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-200"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
+              {!isUploading && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-xs text-muted-foreground hover:text-white px-2.5 py-1 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add More
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearQueue}
+                    className="text-xs text-red-400/80 hover:text-red-300 px-2.5 py-1 rounded-lg hover:bg-red-500/10 transition-colors"
+                  >
+                    Clear All
+                  </button>
                 </div>
               )}
+            </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+            {/* List of queue items */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 max-h-[380px] overflow-y-auto pr-1">
+              {uploadQueue.map((item) => (
+                <div
+                  key={item.id}
+                  className={`p-3 rounded-xl border flex items-center gap-3 transition-all ${
+                    item.status === "success"
+                      ? "bg-emerald-500/5 border-emerald-500/20"
+                      : item.status === "error"
+                      ? "bg-red-500/5 border-red-500/20"
+                      : item.status === "uploading"
+                      ? "bg-primary/5 border-primary/30"
+                      : "bg-white/5 border-white/10"
+                  }`}
+                >
+                  {/* Thumbnail Preview */}
+                  <div className="w-16 h-16 rounded-lg bg-black/60 overflow-hidden flex-shrink-0 relative border border-white/10">
+                    {item.mediaType === "video" ? (
+                      <video
+                        src={item.previewUrl}
+                        className="w-full h-full object-cover"
+                        preload="metadata"
+                        muted
+                      />
+                    ) : (
+                      <img
+                        src={item.previewUrl}
+                        alt={item.title}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                    <span
+                      className={`absolute bottom-1 left-1 text-[8px] font-bold px-1 rounded uppercase tracking-wider backdrop-blur-md ${
+                        item.mediaType === "video"
+                          ? "bg-indigo-500/80 text-white"
+                          : "bg-emerald-500/80 text-white"
+                      }`}
+                    >
+                      {item.mediaType}
+                    </span>
+                  </div>
+
+                  {/* Details & Title input */}
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <input
+                      type="text"
+                      value={item.title}
+                      onChange={(e) => updateQueueItemTitle(item.id, e.target.value)}
+                      disabled={item.status === "uploading" || item.status === "success"}
+                      placeholder="Title"
+                      className="w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-white placeholder-muted-foreground focus:outline-none focus:border-primary disabled:opacity-60 truncate"
+                    />
+
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span className="truncate max-w-[140px]">{item.file.name}</span>
+                      <span>{formatBytes(item.file.size)}</span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    {item.status === "uploading" && (
+                      <div className="space-y-1 pt-0.5">
+                        <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-150"
+                            style={{ width: `${item.progress}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-primary">
+                          <span>Uploading...</span>
+                          <span className="font-mono">{item.progress}%</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Status Badge & Error Feedback */}
+                    {item.status === "success" && (
+                      <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Uploaded & Saved
+                      </div>
+                    )}
+
+                    {item.status === "error" && (
+                      <div className="flex items-center justify-between text-[11px] text-red-400">
+                        <span className="truncate max-w-[160px]">{item.errorMessage || "Failed"}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRetryItem(item)}
+                          className="px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 text-white text-[10px] font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Remove Button */}
+                  {item.status !== "uploading" && (
+                    <button
+                      type="button"
+                      onClick={() => removeFromQueue(item.id)}
+                      className="p-1.5 text-muted-foreground hover:text-white rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
+                      title="Remove file"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom Actions Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-white/5">
+              <div className="text-xs text-muted-foreground">
+                <span>
+                  {pendingCount} file(s) ready to upload • {successCount} completed
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedFile(null);
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
+                  onClick={clearQueue}
                   disabled={isUploading}
-                  className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
+                  className="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-medium text-muted-foreground hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
                 >
-                  Cancel
+                  Clear Queue
                 </button>
                 <button
-                  type="submit"
-                  disabled={isUploading}
-                  className="px-5 py-2 rounded-lg text-sm font-medium bg-primary text-black hover:bg-primary/90 transition-all flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50"
+                  type="button"
+                  onClick={handleStartUpload}
+                  disabled={isUploading || pendingCount === 0}
+                  className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl text-xs font-bold bg-primary text-black hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 active:scale-95"
                 >
                   {isUploading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Uploading...
+                      Uploading ({uploadingCount} active)...
                     </>
                   ) : (
                     <>
                       <UploadCloud className="w-4 h-4" />
-                      Upload Media
+                      Upload Images & Videos ({pendingCount})
                     </>
                   )}
                 </button>
               </div>
-            </motion.div>
-          )}
-        </form>
+            </div>
+          </div>
+        )}
       </section>
 
-      {/* ─── MEDIA LIBRARY SECTION ─── */}
+      {/* ─── MEDIA LIBRARY GALLERY SECTION ─── */}
       <section className="space-y-4">
         {/* Header & Filter Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-white/5">
@@ -652,9 +912,9 @@ export default function AdminMediaUpload() {
                         <Edit2 className="w-4 h-4" />
                       </button>
 
-                      {/* Delete */}
+                      {/* Delete with custom confirmation */}
                       <button
-                        onClick={() => setDeletingItem(item)}
+                        onClick={() => handleDeleteItem(item)}
                         title="Delete media"
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
                       >
@@ -761,62 +1021,6 @@ export default function AdminMediaUpload() {
         )}
       </AnimatePresence>
 
-      {/* ─── MODAL: DELETE CONFIRMATION ─── */}
-      <AnimatePresence>
-        {deletingItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-slate-900 border border-red-500/30 rounded-2xl p-6 shadow-2xl space-y-4"
-            >
-              <div className="flex items-center gap-3 text-red-400">
-                <div className="p-2.5 rounded-full bg-red-500/10 border border-red-500/20">
-                  <Trash2 className="w-5 h-5" />
-                </div>
-                <h3 className="text-base font-semibold text-white">Delete Media Item?</h3>
-              </div>
-
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Are you sure you want to delete <span className="text-white font-medium">"{deletingItem.title}"</span>?
-                This action will permanently delete the remote file from your ImageKit media storage
-                and remove the metadata document from Firestore.
-              </p>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setDeletingItem(null)}
-                  disabled={isDeleting}
-                  className="px-4 py-2 text-xs font-medium text-muted-foreground hover:text-white rounded-lg hover:bg-white/5 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteConfirm}
-                  disabled={isDeleting}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-red-600 hover:bg-red-500 text-white transition-all flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {isDeleting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Confirm Delete
-                    </>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
       {/* ─── MODAL: FULL PREVIEW LIGHTBOX ─── */}
       <AnimatePresence>
         {previewItem && (
@@ -840,7 +1044,7 @@ export default function AdminMediaUpload() {
                   onClick={() => setPreviewItem(null)}
                   className="p-1.5 text-muted-foreground hover:text-white rounded-lg hover:bg-white/10 transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

@@ -10,6 +10,7 @@ export const ALLOWED_IMAGE_MIMES = new Set([
 export const ALLOWED_VIDEO_MIMES = new Set([
   "video/mp4",
   "video/webm",
+  "video/quicktime",
 ]);
 
 export const MAX_IMAGE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -145,6 +146,8 @@ export function inferMimeType(fileName: string, providedMime?: string): string {
       return "video/mp4";
     case "webm":
       return "video/webm";
+    case "mov":
+      return "video/quicktime";
     default:
       return providedMime || "application/octet-stream";
   }

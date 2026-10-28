@@ -48,6 +48,7 @@ export const ALLOWED_IMAGE_TYPES = [
 export const ALLOWED_VIDEO_TYPES = [
   "video/mp4",
   "video/webm",
+  "video/quicktime",
 ];
 
 export const MAX_IMAGE_SIZE = 25 * 1024 * 1024; // 25 MB
@@ -57,34 +58,39 @@ export const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
  * Validate file before initiating upload
  */
 export function validateMediaFile(file: File) {
-  const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
-  const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+  const ext = file.name.split(".").pop()?.toLowerCase() || "";
+  const isImage =
+    ALLOWED_IMAGE_TYPES.includes(file.type) ||
+    ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
+  const isVideo =
+    ALLOWED_VIDEO_TYPES.includes(file.type) ||
+    ["mp4", "webm", "mov"].includes(ext);
 
   if (!isImage && !isVideo) {
     throw new Error(
-      `Unsupported file type "${file.type || file.name}". Allowed types: JPEG, PNG, WEBP, GIF, MP4, WEBM.`
+      `Unsupported file "${file.name}". Allowed types: JPEG, PNG, WEBP, GIF, MP4, WEBM, MOV.`
     );
   }
 
   if (file.size <= 0) {
-    throw new Error("The selected file is empty (0 bytes).");
+    throw new Error(`File "${file.name}" is empty (0 bytes).`);
   }
 
   if (isImage && file.size > MAX_IMAGE_SIZE) {
     throw new Error(
-      `Image size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 25 MB limit.`
+      `Image "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 25 MB limit.`
     );
   }
 
   if (isVideo && file.size > MAX_VIDEO_SIZE) {
     throw new Error(
-      `Video size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB limit.`
+      `Video "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 100 MB limit.`
     );
   }
 
   return {
     mediaType: isImage ? ("image" as const) : ("video" as const),
-    mimeType: file.type,
+    mimeType: file.type || (isImage ? `image/${ext}` : `video/${ext}`),
   };
 }
 
@@ -96,7 +102,7 @@ export async function getMediaAuth(): Promise<ImageKitAuthResponse> {
 }
 
 /**
- * Save verified upload metadata into Firestore
+ * Save verified upload metadata into Firestore (single item)
  */
 export async function completeMediaUpload(params: {
   fileId: string;
@@ -109,17 +115,36 @@ export async function completeMediaUpload(params: {
 }
 
 /**
+ * Save multiple verified upload records into Firestore in a batch
+ */
+export async function completeMediaBatchUpload(
+  files: Array<{ fileId: string; title?: string }>
+): Promise<{ items: MediaItem[]; total: number; errors?: any[] }> {
+  return apiFetch<{ items: MediaItem[]; total: number; errors?: any[] }>(
+    "/api/media/complete",
+    {
+      method: "POST",
+      ...jsonRequest({ files }),
+    }
+  );
+}
+
+/**
  * List media records with pagination and optional filter
  */
 export async function listMedia(params?: {
   page?: number;
   limit?: number;
   mediaType?: "image" | "video";
+  search?: string;
+  folder?: string;
 }): Promise<MediaListResponse> {
   const search = new URLSearchParams();
   if (params?.page) search.set("page", String(params.page));
   if (params?.limit) search.set("limit", String(params.limit));
   if (params?.mediaType) search.set("mediaType", params.mediaType);
+  if (params?.search) search.set("search", params.search);
+  if (params?.folder) search.set("folder", params.folder);
 
   const query = search.toString();
   return apiFetch<MediaListResponse>(`/api/media${query ? `?${query}` : ""}`);
@@ -145,11 +170,7 @@ export async function deleteMedia(id: string): Promise<{ id: string; fileId: str
 }
 
 /**
- * Full client-side upload workflow:
- * 1. Validate file type and size
- * 2. Fetch fresh auth parameters
- * 3. Upload directly to ImageKit with progress tracking
- * 4. Complete registration in Firestore
+ * Full client-side upload workflow for a single file
  */
 export async function uploadMediaToImageKit(
   file: File,
