@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { listDocuments, createDocument, updateDocument } from "@/lib/server/firestore";
+import { listDocuments, createDocument, createDocuments, updateDocument } from "@/lib/server/firestore";
 import { resolveCmsCollection } from "@/lib/server/cms-config";
 import { errorResponse, successResponse } from "@/lib/server/responses";
 import { applySessionCookies, requireSession, requireWriteAccess } from "@/lib/server/session";
@@ -51,6 +51,36 @@ export async function POST(
 
   try {
     const body = await request.json();
+
+    // Check for batch array of items
+    const rawItems = Array.isArray(body)
+      ? body
+      : Array.isArray((body as any)?.items)
+      ? (body as any).items
+      : null;
+
+    if (rawItems) {
+      if (rawItems.length === 0) {
+        return errorResponse("Items array cannot be empty.", 400);
+      }
+      const validatedItems: Record<string, unknown>[] = [];
+      for (let i = 0; i < rawItems.length; i++) {
+        const itemResult = collectionConfig.schema.safeParse(rawItems[i]);
+        if (!itemResult.success) {
+          return errorResponse(`Item at index ${i} failed validation.`, 400, itemResult.error.flatten());
+        }
+        validatedItems.push(itemResult.data);
+      }
+      const createdItems = await createDocuments(collectionConfig.collectionName, validatedItems);
+      const response = successResponse(
+        createdItems,
+        `Created ${createdItems.length} ${collectionConfig.key} items successfully.`,
+        201
+      );
+      return sessionState.refreshed ? applySessionCookies(response, sessionState.session, request) : response;
+    }
+
+    // Single item handling
     const parsed = collectionConfig.schema.safeParse(body);
 
     if (!parsed.success) {

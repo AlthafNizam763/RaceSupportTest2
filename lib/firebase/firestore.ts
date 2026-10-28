@@ -11,6 +11,16 @@ export async function createDocument(collectionName: string, data: Record<string
   return result;
 }
 
+export async function createDocuments(collectionName: string, dataArray: Array<Record<string, unknown>>) {
+  const result = await apiFetch<Array<Record<string, unknown>>>(`/api/cms/${collectionName}`, {
+    method: "POST",
+    ...jsonRequest(dataArray),
+  });
+
+  emitCollectionMutation(collectionName);
+  return result;
+}
+
 export async function updateDocument(
   collectionName: string,
   docId: string,

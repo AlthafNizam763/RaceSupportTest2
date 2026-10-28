@@ -30,15 +30,26 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const folder = String(formData.get("folder") || "uploads");
-    const files = formData.getAll("files").filter((value): value is File => value instanceof File);
+    // Accept files under multiple common field names: "files", "images", "file", "image"
+    let files = formData.getAll("files").filter((value): value is File => value instanceof File);
+    if (files.length === 0) {
+      files = formData.getAll("images").filter((value): value is File => value instanceof File);
+    }
+    if (files.length === 0) {
+      files = formData.getAll("file").filter((value): value is File => value instanceof File);
+    }
+    if (files.length === 0) {
+      files = formData.getAll("image").filter((value): value is File => value instanceof File);
+    }
 
     if (files.length === 0) {
       return errorResponse("No files were provided.", 400);
     }
 
     for (const file of files) {
-      if (!ALLOWED_TYPES.has(file.type)) {
-        return errorResponse(`File type ${file.type} is not supported.`, 400);
+      const mime = file.type || (file.name.toLowerCase().endsWith(".mov") ? "video/quicktime" : "");
+      if (!mime || !ALLOWED_TYPES.has(mime)) {
+        return errorResponse(`File type ${file.type || "unknown"} is not supported.`, 400);
       }
 
       if (file.size > MAX_FILE_SIZE) {

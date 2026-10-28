@@ -27,6 +27,10 @@ export async function uploadImage(file: File, folder: string): Promise<string> {
   return asset.url;
 }
 
+export async function uploadImages(files: File[], folder: string): Promise<UploadedAsset[]> {
+  return uploadFiles(files, folder);
+}
+
 export async function deleteImage(target: string): Promise<void> {
   await apiFetch<null>("/api/upload", {
     method: "DELETE",

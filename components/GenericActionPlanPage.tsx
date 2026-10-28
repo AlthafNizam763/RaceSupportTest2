@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRealtimeCollection } from "../hooks/useRealtimeCollection";
 import { createDocument, updateDocument, deleteDocument, updateOrderBatch } from "../lib/firebase/firestore";
-import { uploadImage } from "../lib/firebase/storage";
+import { uploadImage, uploadFiles } from "../lib/firebase/storage";
 import { DraggableList } from "./DraggableList";
 import { AIContentGenerator } from "./AIContentGenerator";
 import { Plus, Pencil, Trash2, Image as ImageIcon, X, Loader2 } from "lucide-react";
@@ -61,14 +61,16 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
     if (!e.target.files || e.target.files.length === 0) return;
     setUploadingImage(true);
     try {
-      const file = e.target.files[0];
-      const url = await uploadImage(file, collectionName);
-      setFormData(prev => ({ ...prev, images: [...prev.images, url] }));
-      toast.success("Image uploaded!");
+      const files = Array.from(e.target.files);
+      const assets = await uploadFiles(files, collectionName);
+      const newUrls = assets.map((a) => a.url);
+      setFormData(prev => ({ ...prev, images: [...prev.images, ...newUrls] }));
+      toast.success(files.length > 1 ? `${files.length} images uploaded!` : "Image uploaded!");
     } catch (err: any) {
-      toast.error(err.message || "Failed to upload image.");
+      toast.error(err.message || "Failed to upload image(s).");
     } finally {
       setUploadingImage(false);
+      if (e.target) e.target.value = "";
     }
   };
 
@@ -244,7 +246,13 @@ export function GenericActionPlanPage({ collectionName, pageTitle, pageSubtitle 
                   <label className="w-24 h-24 flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 border border-dashed border-white/20 rounded-lg cursor-pointer transition text-muted-foreground hover:text-white">
                     {uploadingImage ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-6 h-6" />}
                     <span className="text-[10px] mt-1 uppercase font-semibold">Upload</span>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
                   </label>
                 </div>
               </div>

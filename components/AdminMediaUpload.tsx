@@ -215,12 +215,11 @@ export default function AdminMediaUpload() {
 
   // Upload an individual queued file
   const uploadSingleItem = async (
-    item: UploadQueueItem,
-    cachedAuth?: any
+    item: UploadQueueItem
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      // 1. Get auth parameters
-      const auth = cachedAuth || (await getMediaAuth());
+      // 1. Get fresh auth parameters per file to ensure unique single-use ImageKit token
+      const auth = await getMediaAuth();
 
       // 2. Upload directly to ImageKit with progress
       const uploadRes: any = await upload({
@@ -288,9 +287,6 @@ export default function AdminMediaUpload() {
     setIsUploading(true);
 
     try {
-      // Fetch fresh auth credentials to share across batch
-      const auth = await getMediaAuth();
-
       // Set items to uploading state
       setUploadQueue((prev) =>
         prev.map((i) =>
@@ -310,7 +306,7 @@ export default function AdminMediaUpload() {
         while (queueToProcess.length > 0) {
           const item = queueToProcess.shift();
           if (!item) break;
-          const res = await uploadSingleItem(item, auth);
+          const res = await uploadSingleItem(item);
           if (res.success) {
             successCount++;
           } else {

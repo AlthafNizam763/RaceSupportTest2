@@ -59,6 +59,40 @@ export async function createDocument(collectionName: string, data: Record<string
   return item;
 }
 
+export async function createDocuments(collectionName: string, itemsData: Record<string, unknown>[]) {
+  const now = new Date().toISOString();
+  const db = getAdminFirestore();
+  const batch = db.batch();
+  const createdItems: CmsRecord[] = [];
+
+  for (const data of itemsData) {
+    const id = randomUUID();
+    const item: CmsRecord = {
+      id,
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const ref = db.collection(collectionName).doc(id);
+    batch.set(ref, item);
+    createdItems.push(item);
+  }
+
+  await batch.commit();
+
+  for (const item of createdItems) {
+    await logAuditEvent({
+      operation: "CREATE",
+      collectionName,
+      documentId: item.id,
+      dataSnapshot: item,
+      status: "SUCCESS",
+    });
+  }
+
+  return createdItems;
+}
+
 export async function updateDocument(
   collectionName: string,
   id: string,
